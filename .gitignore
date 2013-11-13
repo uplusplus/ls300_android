@@ -4,3 +4,7 @@ obj/
 libs/
 *.swp
 *.*~
+/Debug
+/Release
+/*.jpg
+/tags
