@@ -1,0 +1,144 @@
+/*
+ * main.cpp
+ *
+ *  Created on: Jun 14, 2013
+ *      Author: uplusplus
+ */
+#include "../hd_test_config.h"
+#if TEST_EGL
+
+#if 0
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stdio.h>
+#include <strings.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+#define NAME "socket"
+
+int main(int argc, char **argv) {
+	int sock, msgsock, rval;
+	struct sockaddr_un server;
+	char buf[1024];
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock < 0) {
+		perror("opening stream socket");
+		exit(1);
+	}
+	server.sun_family = AF_UNIX;
+	strcpy(server.sun_path, NAME);
+	server.sun_path[0]=0;
+	if (bind(sock, (struct sockaddr *) &server, sizeof(struct sockaddr_un))) {
+		perror("binding stream socket");
+		exit(1);
+	}
+	printf("Socket has name %s\n", server.sun_path);
+	listen(sock, 5);
+	for (;;) {
+		msgsock = accept(sock, 0, 0);
+		if (msgsock == -1)
+		perror("accept");
+		else
+		do {
+			bzero(buf, sizeof(buf));
+			if ((rval = read(msgsock, buf, 1024)) < 0)
+			perror("reading stream message");
+			else if (rval == 0)
+			printf("Ending connection\n");
+			else
+			printf("-->%s\n", buf);
+		}while (rval > 0);
+		close(msgsock);
+	}
+	close(sock);
+	unlink(NAME);
+}
+
+#else
+#include "namesocket.h"
+
+#define DATA ")))))))))))++++++++++++++++++++++++(((((((((((((())))))))))))))"
+
+static int make_unix_domain_addr(const char* name, struct sockaddr_un* pAddr,
+		socklen_t* pSockLen) {
+	int nameLen = strlen(name);
+	pAddr->sun_family = AF_LOCAL;
+	if (nameLen >= (int) sizeof(pAddr->sun_path)) /* too long? */
+		return -1;
+	strcpy(pAddr->sun_path, name);
+	*pSockLen = sizeof(struct sockaddr_un);
+	return 0;
+}
+void client(char *addr) {
+	int sock;
+	struct sockaddr_un server;
+	socklen_t slen;
+	char buf[1024];
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock < 0) {
+		perror("opening stream socket");
+		return;
+	}
+
+	make_unix_domain_addr(addr, &server, &slen);
+
+	if (connect(sock, (struct sockaddr *) &server, slen) < 0) {
+		close(sock);
+		perror("connecting stream socket");
+		return;
+	}
+	if (write(sock, DATA, sizeof(DATA)) < 0)
+		perror("writing on stream socket");
+	close(sock);
+}
+
+#define HEAD "ABCD%05d%05dEFGH"
+#define NAME "/data/data/com.hdsy.ls300/files/egl.sprite"
+
+void EGL_SEND() {
+	int sock;
+	struct sockaddr_un server;
+	socklen_t slen;
+	char buf[1024];
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock < 0) {
+		perror("opening stream socket");
+		return;
+	}
+
+	make_unix_domain_addr(NAME, &server, &slen);
+
+	if (connect(sock, (struct sockaddr *) &server, slen) < 0) {
+		close(sock);
+		perror("connecting stream socket");
+		return;
+	}
+	sprintf(buf, HEAD, 32, 32);
+	if (send(sock, buf, 18, 0) < 0)
+		perror("writing on stream socket");
+
+	for (;;) {
+		memset(buf, random(), 1024);
+		if (send(sock, buf, 1024, 0) < 0)
+			break;
+		sleep(100);
+	}
+
+	close(sock);
+}
+
+int main(int argc, char **argv) {
+//	name_socket ns("ns");
+//	client("ns");
+	EGL_SEND();
+	return 0;
+}
+
+#endif
+
+#endif
