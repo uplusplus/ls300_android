@@ -16,6 +16,9 @@
 
 #define HEAD "ABCD%05d%05d%08.2fEFGH"
 #define NAME "/data/data/com.hdsy.ls300/files/egl.sprite"
+#define PORT 9090
+#define IP_ADDRESS "127.0.0.1"
+#define SOCKET_TCP 1
 
 static int make_unix_domain_addr(const char* name, struct sockaddr_un* pAddr,
 		socklen_t* pSockLen) {
@@ -41,12 +44,24 @@ void create_image(char* buf, int i, int w) {
 
 void EGL_SEND(int size, int frames) {
 	int sock, i, j, s;
-	struct sockaddr_un server;
 	socklen_t slen;
 	char buf[100], *sbuf;
 
 	printf("-> Start...\n");
 
+#if SOCKET_TCP
+    struct sockaddr_in server;
+    if ( (sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ) {
+        return;
+     }
+
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    inet_aton(IP_ADDRESS,&server.sin_addr);
+    // server.sin_addr.s_addr = inet(IP_ADDRESS);//htonl(INADDR_ANY);
+    server.sin_port = htons(PORT);
+#else
+    struct sockaddr_un server;
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock < 0) {
 		perror("opening stream socket");
@@ -54,8 +69,8 @@ void EGL_SEND(int size, int frames) {
 	}
 
 	make_unix_domain_addr(NAME, &server, &slen);
-
-	if (connect(sock, (struct sockaddr *) &server, slen) < 0) {
+#endif
+	if (connect(sock, (struct sockaddr *) &server, sizeof(server)) < 0) {
 		close(sock);
 		perror("connecting stream socket");
 		return;

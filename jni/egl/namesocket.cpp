@@ -4,11 +4,14 @@
  *  Created on: Aug 8, 2013
  *      Author: uplusplus
  */
+#include <stdlib.h>
+#include <arpa/inet.h>
 
 #include "namesocket.h"
 #include "base.h"
-#include <stdlib.h>
 
+#define SOCKET_TCP 1
+#define SOCKET_PORT 9090
 /*
  * Create a UNIX-domain socket address in the Linux "abstract namespace".
  *
@@ -95,13 +98,15 @@ static void printfv(char* msg, int len) {
 }
 
 int name_socket::read_data() {
-	unsigned int readed_row = 0,readed_in_row;
+	unsigned int readed_row = 0, readed_in_row;
 	char *cursor = buf;
 
 	while (readed_row < height) {
-		for(readed_in_row=0; readed_in_row < width; ){
-			nread = read(clientSock, cursor, width-readed_in_row);
-			if (nread < 0 && (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN)) {
+		for (readed_in_row = 0; readed_in_row < width;) {
+			nread = read(clientSock, cursor, width - readed_in_row);
+			if (nread < 0
+					&& (errno == EINTR || errno == EWOULDBLOCK
+							|| errno == EAGAIN)) {
 				DMSG((STDOUT, "there is no data, try again!\n"));
 				usleep(200000);
 				continue;
@@ -125,17 +130,27 @@ int name_socket::read_data() {
 	return buf_size;
 }
 
-name_socket::name_socket()
-{
-	struct sockaddr_un sockAddr;
+name_socket::name_socket() {
 	socklen_t sockLen;
 	int result = 1;
 
 	state = 0;
 	lfd = clientSock = -1;
 
-	if (makeAddr(EGL_NODE, &sockAddr, &sockLen) < 0)
+#if SOCKET_TCP
+	struct sockaddr_in sockAddr;
+	if ((lfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		return;
+	}
+
+	memset(&sockAddr, 0, sizeof(sockAddr));
+	sockAddr.sin_family = AF_INET;
+	sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	sockAddr.sin_port = htons(SOCKET_PORT);
+#else
+	struct sockaddr_un sockAddr;
+	if (makeAddr(EGL_NODE, &sockAddr, &sockLen) < 0)
+	return;
 	lfd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (lfd < 0) {
 		perror("client socket()");
@@ -143,8 +158,9 @@ name_socket::name_socket()
 	}
 
 	remove(EGL_NODE);
+#endif
 
-	if (bind(lfd, (const struct sockaddr*) &sockAddr, sockLen) < 0) {
+	if (bind(lfd, (const struct sockaddr*) &sockAddr, sizeof(sockAddr)) < 0) {
 		perror("server bind()");
 		return;
 	}
