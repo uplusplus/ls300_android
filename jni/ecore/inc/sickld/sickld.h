@@ -63,14 +63,37 @@ e_int32 DEV_EXPORT sld_release(sickld_t **sick);
 /** Initializes the Sick LD unit (use scan areas defined in flash) */
 e_int32 DEV_EXPORT sld_initialize(sickld_t* sick);
 e_int32 DEV_EXPORT sld_uninitialize(sickld_t* sick);
+e_int32 DEV_EXPORT sld_reset_work(sickld_t *sick);
 
-e_int32 DEV_EXPORT sld_set_temp_scan_areas(sickld_t *sick,
+/**
+ * \brief Sets the Sick LD sensor mode to ROTATE
+ */
+e_int32 DEV_EXPORT sld_set_sensor_mode_to_rotate(sickld_t *sick);
+/**
+ * \brief Sets the Sick LD sensor mode to ROTATE
+ */
+e_int32 DEV_EXPORT sld_set_sensor_mode_to_measure(sickld_t *sick);
+e_int32 DEV_EXPORT sld_set_sensor_mode_to_measure_ex(sickld_t *sick);
+/**
+ * \brief Sets the Sick LD sensor mode to IDLE
+ */
+e_int32 DEV_EXPORT sld_set_sensor_mode_to_idle(sickld_t *sick);
+
+
+e_int32 DEV_EXPORT sld_set_scan_areas(sickld_t *sick,
 		const e_float64 * active_sector_start_angles,
 		const e_float64 * active_sector_stop_angles,
 		const e_uint32 num_active_sectors);
 
 e_int32 DEV_EXPORT sld_set_global_params_and_scan_areas(sickld_t *sick,
 		const e_uint32 sick_motor_speed, const e_float64 sick_angle_step,
+		const e_float64 * const active_sector_start_angles,
+		const e_float64 * const active_sector_stop_angles,
+		const e_uint32 num_active_sectors);
+
+e_int32 DEV_EXPORT sld_set_global_params_and_scan_areas_interlace(sickld_t *sick,
+		const e_uint32 sick_motor_speed, const e_float64 sick_angle_step,
+		const e_uint32 interlace,
 		const e_float64 * const active_sector_start_angles,
 		const e_float64 * const active_sector_stop_angles,
 		const e_uint32 num_active_sectors);
@@ -88,6 +111,10 @@ e_int32 DEV_EXPORT sld_get_measurements(sickld_t *sick,
 		e_float64 * const sector_stop_angles,
 		e_uint32 * const sector_start_timestamps,
 		e_uint32 * const sector_stop_timestamps);
+
+e_int32 DEV_EXPORT sld_get_measurements_ex(sickld_t *sick,scan_data_t *pdata);
+e_int32 DEV_EXPORT sld_get_scan_profiles_ex(sickld_t *sick, const e_uint16 profile_format,
+		const e_uint16 num_profiles);
 
 e_int32 DEV_EXPORT sld_get_status(sickld_t *sick);
 

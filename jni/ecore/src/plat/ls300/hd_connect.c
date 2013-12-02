@@ -9,6 +9,11 @@
  * Copyright (c) 2013, 海达数云
  * All rights reserved.
  *
+ *
+ *tips:
+ *	1  发送和接收使用的异步时
+ *				返回值 >= 0，默认是发送成功，但可能没有全部发出。
+ *				返回值 <  0, 出现异常，通常是连接断开了，需要重置连接。
  */
 
 #include <comm/hd_list.h>
@@ -17,12 +22,17 @@
 #include <sickld/sickld_base.h>
 #include <arch/hd_timer_api.h>
 
+#ifdef DMSG
+#undef DMSG
+#define DMSG
+#endif
+
 enum {
 	E_CONNECT_SOCKET = 1, E_CONNECT_COM = 2, E_CONNECT_PIPE = 3,
 };
 
 static char tostring[1024];
-#define CONNECT_DELAY (3000) //ms
+
 /**
  *\brief 创建套接字连接，并设置套接字相应得属性。
  *\param sc 定义了海达连接的对象指针。
@@ -31,8 +41,8 @@ static char tostring[1024];
  *\retval E_OK 表示成功。
  */
 
-e_int32 sc_open_socket(hd_connect_t* sc, char* sick_ip_address, e_uint16 sick_tcp_port,
-		int socket_type) {
+e_int32 sc_open_socket(hd_connect_t* sc, char* sick_ip_address,
+		e_uint16 sick_tcp_port, int socket_type) {
 	int ret;
 	e_assert(sc, E_ERROR_INVALID_HANDLER);
 	memset(sc, 0, sizeof(hd_connect_t));
@@ -86,8 +96,7 @@ e_int32 sc_open_serial(hd_connect_t* sc, char* com_name, e_uint32 baudrate) {
  *\param size 定义了管道缓冲区大小。
  *\retval E_OK 表示成功。
  */
-e_int32 sc_open_pipe(hd_connect_t* sc, char* pipe_name, e_uint32 size)
-{
+e_int32 sc_open_pipe(hd_connect_t* sc, char* pipe_name, e_uint32 size) {
 	int ret;
 	e_assert(sc, E_ERROR_INVALID_HANDLER);
 	memset(sc, 0, sizeof(hd_connect_t));
@@ -202,22 +211,45 @@ e_int32 sc_try_connect(hd_connect_t *sc, e_uint32 max_times) {
  *\brief 连接对象的接收函数。
  *\param sc 定义了海达连接的对象指针。
  *\param buffer 定义了接收缓存的大小。
- *\param blen 定义了接收数据的长度。
+ *\param how_many_to_read 定义了接收数据的长度。
  *\retval E_OK 表示成功。
  */
-e_int32 sc_recv(hd_connect_t *sc, e_uint8 *buffer, e_uint32 blen) {
+e_int32 sc_recv(hd_connect_t *sc, e_uint8 *buffer, e_uint32 bytes_to_read) {
 	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
-
 	switch (sc->mask) {
 	case E_CONNECT_SOCKET:
-		return Socket_Recv(sc->socket, buffer, blen);
+		return Socket_Recv(sc->socket, buffer, bytes_to_read);
 	case E_CONNECT_COM:
-		return Serial_Read(&sc->serial, buffer, blen);
+		return Serial_Read(&sc->serial, buffer, bytes_to_read);
 	case E_CONNECT_PIPE:
-		return Pipe_Read(&sc->pipe, buffer, blen);
+		return Pipe_Read(&sc->pipe, buffer, bytes_to_read);
 	default:
 		return E_ERROR_INVALID_HANDLER;
 	}
+}
+
+e_int32 sc_recv_ex(hd_connect_t *sc, e_uint8 *buffer, e_uint32 bytes_to_read,
+		e_uint32 timeout, e_int32 *loop) {
+	e_int32 ret;
+	e_uint32 bytes_done = 0;
+	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
+	while (bytes_done < bytes_to_read && (!loop || *loop)) {
+		ret = sc_recv(sc, buffer + bytes_done, bytes_to_read - bytes_done);
+		if (ret < 0) {
+			ret = sc_error(sc);
+			break;
+		}
+
+		bytes_done += ret;
+
+		if (bytes_done < bytes_to_read) { //一次没发送完，说明网络负载过大，等待
+			ret = sc_select(sc, E_READ, timeout);
+			if (ret < 0)
+				break;
+		}
+	}
+	e_assert(bytes_done == bytes_to_read, ret);
+	return bytes_done;
 }
 
 /**
@@ -228,15 +260,53 @@ e_int32 sc_recv(hd_connect_t *sc, e_uint8 *buffer, e_uint32 blen) {
  *\param blen 定义了发送数据的长度。
  *\retval E_OK 表示成功。
  */
-e_int32 sc_send(hd_connect_t *sc, e_uint8 *buffer, e_uint32 blen) {
+e_int32 sc_send(hd_connect_t *sc, e_uint8 *buffer, e_uint32 bytes_to_send) {
 	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
 	switch (sc->mask) {
 	case E_CONNECT_SOCKET:
-		return Socket_Send(sc->socket, buffer, blen);
+		return Socket_Send(sc->socket, buffer, bytes_to_send);
 	case E_CONNECT_COM:
-		return Serial_Write(&sc->serial, buffer, blen);
+		return Serial_Write(&sc->serial, buffer, bytes_to_send);
 	case E_CONNECT_PIPE:
-		return Pipe_Write(&sc->pipe, buffer, blen);
+		return Pipe_Write(&sc->pipe, buffer, bytes_to_send);
+	default:
+		return E_ERROR_INVALID_HANDLER;
+	}
+}
+
+e_int32 sc_send_ex(hd_connect_t *sc, e_uint8 *buffer, e_uint32 bytes_to_send,
+		e_uint32 timeout, e_int32 *loop) {
+	e_int32 ret;
+	e_uint32 bytes_done = 0;
+	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
+	while (bytes_done < bytes_to_send && (!loop || *loop)) {
+		ret = sc_send(sc, buffer + bytes_done, bytes_to_send - bytes_done);
+		if (ret < 0) {
+			ret = sc_error(sc);
+			break;
+		}
+
+		bytes_done += ret;
+
+		if (bytes_done < bytes_to_send) { //一次没发送完，说明网络负载过大，等待
+			ret = sc_select(sc, E_WRITE, timeout);
+			if (ret < 0)
+				break;
+		}
+	}
+	e_assert(bytes_done == bytes_to_send, ret);
+	return bytes_done;
+}
+
+e_int32 sc_error(hd_connect_t *sc) {
+	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
+	switch (sc->mask) {
+	case E_CONNECT_SOCKET:
+		return Socket_Error(sc->socket);
+	case E_CONNECT_COM:
+		return Serial_Error(&sc->serial);
+	case E_CONNECT_PIPE:
+		return Pipe_Error(&sc->pipe);
 	default:
 		return E_ERROR_INVALID_HANDLER;
 	}
@@ -259,7 +329,8 @@ static e_uint32 compute_elapsed_time(const e_uint32 beg_time, e_uint32 end_time)
  */
 e_int32 sc_request(hd_connect_t *sc, e_uint8 *send_buffer, e_uint32 slen,
 		e_uint8 *recv_buffer, e_uint32 rlen, e_uint32 timeout_usec) {
-	e_int32 ret;
+	e_int32 ret, read_len;
+	e_uint8 c;
 	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
 	/* Timeval structs for handling timeouts */
 	e_uint32 beg_time, elapsed_time;
@@ -274,16 +345,17 @@ e_int32 sc_request(hd_connect_t *sc, e_uint8 *send_buffer, e_uint32 slen,
 	elapsed_time = compute_elapsed_time(beg_time, GetTickCount());
 	e_assert(elapsed_time < timeout_usec, E_ERROR_TIME_OUT);
 
-	ret = sc_send(sc, send_buffer, slen);
+	ret = sc_send_ex(sc, send_buffer, slen, timeout_usec, &sc->state);
 	e_assert(ret>0, ret);
 
-	while (elapsed_time < timeout_usec) {
+	read_len = 0;
+	while (elapsed_time < timeout_usec && read_len < rlen) {
 		//接收
-		ret = sc_select(sc, E_READ, timeout_usec - elapsed_time);
+		ret = sc_recv_ex(sc, &c, 1, timeout_usec - elapsed_time, NULL);
 		e_assert(ret>0, ret);
 
-		ret = sc_recv(sc, recv_buffer, rlen); //收到了，就不要管超不超时，直接返回结果
-		if (ret > 0)
+		recv_buffer[read_len++] = c;
+		if (c == '@')
 			break;
 
 		elapsed_time = compute_elapsed_time(beg_time, GetTickCount());
@@ -308,36 +380,10 @@ e_int32 sc_request_and_check(hd_connect_t *sc, e_uint8 *send_buffer,
 		e_uint8 * check_string, e_uint32 timeout_usec) {
 	e_int32 ret;
 	e_assert(sc&&sc->state, E_ERROR_INVALID_HANDLER);
-	e_uint32 beg_time, elapsed_time;
-
-	/* Acquire the elapsed time since epoch */
-	beg_time = GetTickCount();
-
-	//发送
-	ret = sc_select(sc, E_WRITE, timeout_usec);
+	ret = sc_request(sc, send_buffer, slen, recv_buffer, rlen, timeout_usec);
 	e_assert(ret>0, ret);
-
-	elapsed_time = compute_elapsed_time(beg_time, GetTickCount());
-	e_assert(elapsed_time < timeout_usec, E_ERROR_TIME_OUT);
-
-	ret = sc_send(sc, send_buffer, slen);
-	e_assert(ret>0, ret);
-
-	while (elapsed_time < timeout_usec) {
-		//接收
-		ret = sc_select(sc, E_READ, timeout_usec - elapsed_time);
-		e_assert(ret>0, ret);
-
-		//收到了，就不要管超不超时，直接返回结果
-		ret = sc_recv(sc, recv_buffer, rlen);
-		if (ret > 0) {
-			ret = strncmp(recv_buffer, check_string, rlen);
-			if (ret == 0)
-				break;
-		}
-
-		elapsed_time = compute_elapsed_time(beg_time, GetTickCount());
-	}
+	if (strncmp(recv_buffer, check_string, rlen))
+		return E_ERROR;
 
 	return E_OK;
 }

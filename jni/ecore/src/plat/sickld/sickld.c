@@ -66,9 +66,6 @@ static e_int32 sld_send_message_and_getreply(sickld_t *sick,
 		const sick_message_t *send_message, sick_message_t *recv_message);
 static e_int32 sld_set_sensor_mode(sickld_t *sick,
 		const e_uint8 new_sick_sensor_mode);
-static e_int32 sld_set_sensor_mode_to_rotate(sickld_t *sick);
-static e_int32 sld_set_sensor_mode_to_measure(sickld_t *sick);
-static e_int32 sld_set_sensor_mode_to_idle(sickld_t *sick);
 static e_float64 sld_ticks2angle(const e_uint16 ticks);
 static e_uint16 sld_angle2ticks(const e_float64 angle);
 static e_int32 sld_cancel_scan_profiles(sickld_t *sick);
@@ -138,13 +135,13 @@ e_int32 sld_initialize(sickld_t* sick) {
 	sick->initialized = true;
 
 	/* Ok, lets sync the driver with the Sick */
-	DMSG((STDOUT,"\tAttempting to sync driver with Sick LD...\r\n"));
+//	DMSG((STDOUT,"\tAttempting to sync driver with Sick LD...\r\n"));
 	ret = sld_sync_driver_with_sick(sick);
 	if (ret <= 0)
 		return ret;
 
-	DMSG((STDOUT,"\t\tSynchronized!\r\n"));
-	sld_print_init_footer(sick);
+//	DMSG((STDOUT,"\t\tSynchronized!\r\n"));
+//	sld_print_init_footer(sick);
 
 	return ret;
 }
@@ -191,6 +188,7 @@ e_int32 sld_uninitialize(sickld_t* sick) {
 
 static e_int32 sld_sync_driver_with_sick(sickld_t *sick) {
 	e_int32 ret;
+	DMSG((STDOUT,"\tAttempting to sync driver with Sick LD...\r\n"));
 	/* Acquire current configuration */
 	ret = sld_get_status(sick);
 	e_assert(ret>0, ret);
@@ -206,10 +204,12 @@ static e_int32 sld_sync_driver_with_sick(sickld_t *sick) {
 	/* Reset Sick signals */
 	ret = sld_set_signals(sick, DEFAULT_SICK_SIGNAL_SET);
 	e_assert(ret>0, ret);
+
+	DMSG((STDOUT,"\t\tSynchronized!\r\n"));
 	return E_OK;
 }
 
-e_int32 sld_set_temp_scan_areas(sickld_t *sick,
+e_int32 sld_set_scan_areas(sickld_t *sick,
 		const e_float64 * active_sector_start_angles,
 		const e_float64 * active_sector_stop_angles,
 		const e_uint32 num_active_sectors) {
@@ -340,6 +340,23 @@ e_int32 sld_get_scan_profiles(sickld_t *sick, const e_uint16 profile_format,
 	ret = sld_set_sensor_mode_to_measure(sick);
 	e_assert(ret>0, ret);
 
+	ret = sld_get_scan_profiles_ex(sick, profile_format, num_profiles);
+	e_assert(ret>0, ret);
+
+	return E_OK;
+}
+
+/**
+ * \brief Request n scan profiles from the Sick LD unit
+ * \param profile_format The format for the requested scan profiles
+ * \param num_profiles The number of profiles to request from Sick LD. (Default: 0)
+ *                     (NOTE: When num_profiles = 0, the Sick LD continuously streams profile data)
+ */
+e_int32 sld_get_scan_profiles_ex(sickld_t *sick, const e_uint16 profile_format,
+		const e_uint16 num_profiles) {
+	int ret = E_OK;
+	e_assert(sick, E_ERROR_INVALID_HANDLER);
+
 	/* A quick check to ensure the requested format is supported by the driver */
 	ret = sld_supported_scan_profile_format(profile_format);
 	if (e_failed(ret,"Unsupported profile format!\r\n"))
@@ -399,7 +416,6 @@ e_int32 sld_get_scan_profiles(sickld_t *sick, const e_uint16 profile_format,
 
 	return E_OK;
 }
-
 /**
  * \brief Parses a well-formed sequence of bytes into a corresponding scan profile
  * \param *src_buffer The source data buffer
@@ -712,6 +728,9 @@ e_int32 sld_get_measurements(sickld_t *sick,
 	if (e_failed(ret))
 		goto OUT;
 
+	DMSG(
+			(STDOUT,"SICK profile_counter=%u,profile_number=%u,layer_num=%u\n", profile_data.profile_counter,profile_data.profile_number,profile_data.layer_num));
+
 	/* Update and check the returned sensor status */
 	if ((sick->sensor_mode = profile_data.sensor_status)
 			!= SICK_SENSOR_MODE_MEASURE) {
@@ -803,6 +822,112 @@ e_int32 sld_get_measurements(sickld_t *sick,
 					profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].timestamp_stop;
 		}
 
+		/* Update the total number of measurements */
+		total_measurements +=
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points;
+	}
+
+	OUT: skm_release(&recv_message);
+	return ret;
+}
+
+e_int32 sld_get_measurements_ex(sickld_t *sick, scan_data_t *pdata) {
+	e_int32 ret = E_OK;
+	e_uint32 i, total_measurements;
+	/* Ensure the device has been initialized */
+	e_assert(sick&&sick->initialized, E_ERROR_INVALID_HANDLER);
+
+	/* The following conditional holds true if the user wants a RANGE+ECHO data
+	 * stream but already has an active RANGE-ONLY stream.
+	 */
+	if (sick->streaming_range_data) {
+		/* Cancel the current RANGE-ONLY data stream */
+		ret = sld_cancel_scan_profiles(sick);
+		e_assert(ret>0, ret);
+
+		/* Request a RANGE+ECHO data stream */
+		ret = sld_get_scan_profiles(sick, SICK_SCAN_PROFILE_RANGE_AND_ECHO, 0);
+		e_assert(ret>0, ret);
+	}
+
+	/* If there aren't any active data streams, setup a new one */
+	if (!sick->streaming_range_data && !sick->streaming_range_and_echo_data) {
+		/* Request a RANGE+ECHO data stream */
+		ret = sld_get_scan_profiles(sick, SICK_SCAN_PROFILE_RANGE_AND_ECHO, 0);
+		e_assert(ret>0, ret);
+
+	}
+
+	/* Declare the receive message object */
+	sick_message_t recv_message;
+	ret = skm_create(&recv_message);
+	e_assert(ret>0, ret);
+
+	/* Acquire the most recently buffered message */
+	ret = sld_recv_message(sick, &recv_message, (e_uint32) 1e6);
+	if (e_failed(ret))
+		goto OUT;
+
+	/* A single buffer for payload contents */
+	e_uint8 payload_buffer[MESSAGE_PAYLOAD_MAX_LENGTH] = { 0 };
+
+	/* Get the message payload */
+	ret = skm_get_payload(&recv_message, payload_buffer);
+	if (e_failed(ret))
+		goto OUT;
+
+	/* Define the destination Sick LD scan profile struct */
+	sick_ld_scan_profile_t profile_data;
+
+	/* Extract the scan profile */
+	ret = sld_parse_scan_profile(&payload_buffer[2], &profile_data);
+	if (e_failed(ret))
+		goto OUT;
+
+	pdata->profile_counter = profile_data.profile_counter;
+	pdata->profile_number = profile_data.profile_number;
+	pdata->layer_num = profile_data.layer_num;
+
+//	DMSG((STDOUT,"SICK profile_counter=%u,profile_number=%u,layer_num=%u\n", profile_data.profile_counter,profile_data.profile_number,profile_data.layer_num));
+
+	/* Update and check the returned sensor status */
+	if ((sick->sensor_mode = profile_data.sensor_status)
+			!= SICK_SENSOR_MODE_MEASURE) {
+		DMSG(
+				(STDOUT,"Unexpected sensor mode! %s \r\n", sld_sensor_mode_to_string(sick->sensor_mode)));
+		ret = E_ERROR_INVALID_STATUS;
+		goto OUT;
+	}
+
+	/* Update and check the returned motor status */
+	if ((sick->motor_mode = profile_data.motor_status) != SICK_MOTOR_MODE_OK) {
+		DMSG(
+				(STDOUT,"Unexpected motor mode! (Are you using a valid motor speed!)"));
+		ret = E_ERROR_INVALID_STATUS;
+		goto OUT;
+
+	}
+
+	/* Everything is OK, so now populate the relevant return buffers */
+	for (i = 0, total_measurements = 0;
+			i < sick->sector_config.sick_num_active_sectors; i++) {
+
+		/* Copy over the returned range values */
+		memcpy(&pdata->range_measurements[total_measurements],
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].range_values,
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points
+						* sizeof(e_float64));
+		memcpy(&pdata->echo_measurements[total_measurements],
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].echo_values,
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points
+						* sizeof(e_uint32));
+		memcpy(&pdata->angle_measurements[total_measurements],
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].scan_angles,
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points
+						* sizeof(e_float64));
+		pdata->num_measurements[i] =
+				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points;
+		pdata->sector_data_offsets[i] = total_measurements;
 		/* Update the total number of measurements */
 		total_measurements +=
 				profile_data.sector_data[sick->sector_config.sick_active_sector_ids[i]].num_data_points;
@@ -1179,16 +1304,17 @@ static e_int32 sld_send_message(sickld_t *sick,
 	if (byte_interval == 0) {
 
 		/* Write the message to the stream */
-		len = sc_send(&sick->sick_connect, message_buffer, message_length);
+		len = sc_send_ex(&sick->sick_connect, message_buffer, message_length,
+				DEFAULT_SICK_MESSAGE_TIMEOUT, NULL);
 		if (e_check(len!=message_length,"send failed.\r\n"))
 			goto OUT;
 	} else {
 
 		/* Write the message to the unit one byte at a time */
 		for (i = 0; i < message_length; i++) {
-
 			/* Write a single byte to the stream */
-			len = sc_send(&sick->sick_connect, &message_buffer[i], 1);
+			len = sc_send_ex(&sick->sick_connect, &message_buffer[i], 1,
+					DEFAULT_SICK_BYTE_TIMEOUT, NULL);
 			if (e_check(len!=1,"send failed.\r\n"))
 				goto OUT;
 
@@ -1620,7 +1746,7 @@ static e_int32 sld_generate_sector_config(
 /**
  * \brief Sets the Sick LD sensor mode to ROTATE
  */
-static e_int32 sld_set_sensor_mode_to_rotate(sickld_t *sick) {
+e_int32 sld_set_sensor_mode_to_rotate(sickld_t *sick) {
 	int ret = E_OK;
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* If necessary adjust the operating mode of the sensor */
@@ -1634,7 +1760,7 @@ static e_int32 sld_set_sensor_mode_to_rotate(sickld_t *sick) {
 /**
  * \brief Sets the Sick LD sensor mode to ROTATE
  */
-static e_int32 sld_set_sensor_mode_to_measure(sickld_t *sick) {
+e_int32 sld_set_sensor_mode_to_measure(sickld_t *sick) {
 	int ret = E_OK;
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* If necessary adjust the operating mode of the sensor */
@@ -1645,10 +1771,24 @@ static e_int32 sld_set_sensor_mode_to_measure(sickld_t *sick) {
 	return ret;
 }
 
+e_int32 sld_set_sensor_mode_to_measure_ex(sickld_t *sick) {
+	int ret = E_OK;
+	e_assert(sick, E_ERROR_INVALID_HANDLER);
+	/* If necessary adjust the operating mode of the sensor */
+	if (sick->sensor_mode != SICK_SENSOR_MODE_MEASURE) {
+		/* Switch the sensor's operating mode to ROTATE */
+		ret = sld_set_sensor_mode(sick, SICK_SENSOR_MODE_MEASURE);
+	}
+
+	ret = sld_get_scan_profiles(sick, SICK_SCAN_PROFILE_RANGE_AND_ECHO, 0);
+	e_assert(ret>0, ret);
+	return ret;
+}
+
 /**
  * \brief Sets the Sick LD sensor mode to IDLE
  */
-static e_int32 sld_set_sensor_mode_to_idle(sickld_t *sick) {
+e_int32 sld_set_sensor_mode_to_idle(sickld_t *sick) {
 	int ret = E_OK;
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* If necessary adjust the operating mode of the sensor */
@@ -2588,7 +2728,7 @@ e_int32 sld_set_interlace_config(sickld_t *sick,
 	payload_buffer[1] = SICK_CONF_SERV_SET_CONFIGURATION; // Requested service subtype
 
 	/* Set the configuration key */
-	payload_buffer[3] = SICK_CONF_KEY_GLOBAL; // Use the global configuration key
+	payload_buffer[3] = SICK_CONF_KEY_INTERLACE; // Use the global configuration key
 
 	/* Set the message parameters */
 	payload_buffer[5] = sick_interlace_mode;
@@ -2604,6 +2744,36 @@ e_int32 sld_set_interlace_config(sickld_t *sick,
 	sick->global_config.sick_interlace_mode = sick_interlace_mode;
 
 	return E_OK;
+}
+
+e_int32 sld_reset_work(sickld_t *sick) {
+	e_int32 ret = E_OK;
+	/* Ensure the device has been initialized */
+	e_assert(sick, E_ERROR_INVALID_HANDLER);
+
+	ret = sld_set_sensor_mode_to_idle(sick);
+	e_assert(ret>0, ret);
+
+	/* Allocate a single buffer for payload contents */
+	e_uint8 payload_buffer[MESSAGE_PAYLOAD_MAX_LENGTH] = { 0 };
+
+	/* Set the service IDs */
+	payload_buffer[0] = SICK_WORK_SERV_CODE; // Requested service type
+	payload_buffer[1] = SICK_WORK_SERV_RESET; // Requested service subtype
+
+	sick_message_t send_message;
+	ret = skm_create(&send_message);
+	if (e_failed(ret))
+		goto OUT1;
+	ret = skm_build_message(&send_message, payload_buffer, 2);
+	if (e_failed(ret))
+		goto OUT1;
+
+	/* Send the message and get a response */
+	ret = sld_send_message(sick, &send_message, 0);
+
+	OUT1: skm_release(&send_message);
+	return ret;
 }
 
 /**
@@ -2761,29 +2931,49 @@ e_int32 sld_set_global_params_and_scan_areas(sickld_t *sick,
 	if (sick_angle_step != 0.0625) {
 		return sld_set_global_params_and_scan_areas_Not_0_0625(sick,
 				sick_motor_speed, sick_angle_step, active_sector_start_angles,
-				active_sector_stop_angles,num_active_sectors);
+				active_sector_stop_angles, num_active_sectors);
 	} else {
+		ret = sld_set_global_params_and_scan_areas_Not_0_0625(sick, 5, 0.25,
+				active_sector_start_angles, active_sector_stop_angles,
+				num_active_sectors);
+		e_assert(ret>0, ret);
+		ret = sld_set_interlace_config(sick, 3);
+		e_assert(ret>0, ret);
 
-#if 0
-		ret = sld_set_global_params_and_scan_areas_Not_0_0625(sick, 5, 0.25,
-				active_sector_start_angles, active_sector_stop_angles,num_active_sectors);
-		e_assert(ret>0, ret);
-		ret = sld_set_interlace_config(sick, 3);
-		e_assert(ret>0, ret);
-#else
-		ret = sld_set_global_config(sick, sick->global_config.sick_sensor_id, 5,
-				0.25);
-		e_assert(ret>0, ret);
-		ret = sld_set_interlace_config(sick, 3);
-		e_assert(ret>0, ret);
-		ret = sld_set_global_params_and_scan_areas_Not_0_0625(sick, 5, 0.25,
-				active_sector_start_angles, active_sector_stop_angles,num_active_sectors);
-		e_assert(ret>0, ret);
-#endif
 		ret = sld_set_global_config(sick, sick->global_config.sick_sensor_id, 5,
 				0.0625);
 		e_assert(ret>0, ret);
 	}
+	return E_OK;
+}
+
+e_int32 sld_set_global_params_and_scan_areas_interlace(sickld_t *sick,
+		const e_uint32 sick_motor_speed, const e_float64 sick_angle_step,
+		const e_uint32 interlace,
+		const e_float64 * const active_sector_start_angles,
+		const e_float64 * const active_sector_stop_angles,
+		const e_uint32 num_active_sectors) {
+	e_int32 ret;
+	ret = sld_set_interlace_config(sick, 0);
+	e_assert(ret>0, ret);
+
+	ret = sld_set_global_params_and_scan_areas_Not_0_0625(sick,
+			sick_motor_speed, sick_angle_step * interlace,
+			active_sector_start_angles, active_sector_stop_angles,
+			num_active_sectors);
+	e_assert(ret>0, ret);
+	if (1 != interlace) {
+		ret = sld_set_interlace_config(sick, interlace - 1); //interlace值定义不同
+		e_assert(ret>0, ret);
+		ret = sld_set_global_config(sick, sick->global_config.sick_sensor_id,
+				sick_motor_speed, sick_angle_step);
+		e_assert(ret>0, ret);
+		/* Ok, lets sync the driver with the Sick */
+		ret = sld_sync_driver_with_sick(sick);
+		e_assert(ret>0, ret);
+		sld_print_init_footer(sick);
+	}
+
 	return E_OK;
 }
 
@@ -2794,40 +2984,24 @@ static e_int32 sld_read_bytes(sickld_t *sick, e_uint8 * const dest_buffer,
 	int total_num_bytes_read = 0;
 	e_int32 ret = 0;
 
-//	DMSG((STDOUT,"+++++++++++sld_read_bytes total_num_bytes_read=%d num_bytes_to_read=%d",
-//			total_num_bytes_read, num_bytes_to_read));
+//	DMSG((STDOUT,"+++++++++++sld_read_bytes total_num_bytes_read=%d num_bytes_to_read=%d\n",	total_num_bytes_read, num_bytes_to_read));
 	/* Attempt to fetch the bytes */
-	while (total_num_bytes_read < num_bytes_to_read) {
-
-		/* Wait for the OS to tell us that data is waiting! */
-		ret = sc_select(&sick->sick_connect, E_READ, timeout_value);
-		//DMSG((STDOUT,"+++++++++++sld_read_bytes select"));
-		/* Figure out what to do based on the output of select */
-		if (ret == E_ERROR_TIME_OUT)
-			return E_ERROR_TIME_OUT;
-		e_assert((ret > 0), E_ERROR_IO);
-
-		//DMSG((STDOUT,"+++++++++++sld_read_bytes CAN read"));
-
-		/* A file is ready for reading!
-		 *
-		 * NOTE: The following conditional is just a sanity check. Since
-		 *       the file descriptor set only contains the sick device fd,
-		 *       it likely unnecessary to use FD_ISSET
-		 */
 #if FAST_SICK_RECV
-		ret = sc_recv(&sick->sick_connect, &dest_buffer[total_num_bytes_read],
-				num_bytes_to_read - total_num_bytes_read);
-		e_assert((ret >0), E_ERROR_IO);
-		total_num_bytes_read += ret;
+	ret = sc_recv_ex(&sick->sick_connect, dest_buffer, num_bytes_to_read,
+			timeout_value, NULL);
+	if (ret <= 0)
+		return ret;
+
 #else
-		ret = sc_recv(&sick->sick_connect, &dest_buffer[total_num_bytes_read],
-				1);
-		e_assert((ret == 1), E_ERROR_IO);
+	while (total_num_bytes_read < num_bytes_to_read) {
+		ret = sc_recv_ex(&sick->sick_connect,
+				&dest_buffer[total_num_bytes_read], 1, timeout_value, NULL);
+		if (ret <= 0)
+		return ret;
 
 		total_num_bytes_read++;
-#endif
 	}
+#endif
 
 //	DMSG((STDOUT,"+++++++++++sld_read_bytes recv data len:%d",total_num_bytes_read));
 
@@ -2845,16 +3019,15 @@ e_int32 sld_get_next_message_from_datastream(sickld_t *sick,
 	/* Flush the input buffer */
 	e_uint8 byte_buffer;
 
-	e_assert(sick&&sick->initialized, E_ERROR_INVALID_PARAMETER);
-
 //	DMSG((STDOUT,"+++++++++++sld_get_next_message_from_datastream"));
-
 	/* A buffer to hold the current byte out of the stream */
 	const e_uint8 sick_response_header[4] = { 0x02, 'U', 'S', 'P' };
 
 	e_uint8 checksum = 0;
 	e_uint8 message_buffer[MESSAGE_MAX_LENGTH] = { 0 };
 	e_uint32 payload_length = 0;
+
+	e_assert(sick&&sick->initialized, E_ERROR_INVALID_PARAMETER);
 
 	/* Search for the header in the byte stream */
 	for (i = 0; i < sizeof(sick_response_header);) {
@@ -2911,7 +3084,8 @@ e_int32 sld_get_next_message_from_datastream(sickld_t *sick,
 	ret = skm_get_checksum(sick_message);
 
 	if (ret != checksum) {
-		DMSG((STDOUT,"checksum error:ret = %d,checksum = %d\n",(int)ret,checksum));
+		DMSG(
+				(STDOUT,"checksum error:ret = %d,checksum = %d payload_length=%d\n", (int)ret,checksum,payload_length));
 	}
 
 	//e_assert((ret==checksum), E_ERROR_IO);

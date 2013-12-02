@@ -225,6 +225,7 @@ public class ScanServiceManager {
 
 		public void stop() {
 			this.stop = true;
+			resume();
 			try {
 				if (myThread != null) {
 					myThread.join();

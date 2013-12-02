@@ -131,11 +131,16 @@ int name_socket::read_data() {
 }
 
 name_socket::name_socket() {
+	name_socket(EGL_NODE);
+}
+
+name_socket::name_socket(char *dev) {
 	socklen_t sockLen;
 	int result = 1;
 
 	state = 0;
 	lfd = clientSock = -1;
+
 
 #if SOCKET_TCP
 	struct sockaddr_in sockAddr;
@@ -149,7 +154,7 @@ name_socket::name_socket() {
 	sockAddr.sin_port = htons(SOCKET_PORT);
 #else
 	struct sockaddr_un sockAddr;
-	if (makeAddr(EGL_NODE, &sockAddr, &sockLen) < 0)
+	if (makeAddr(dev, &sockAddr, &sockLen) < 0)
 	return;
 	lfd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (lfd < 0) {
@@ -157,47 +162,10 @@ name_socket::name_socket() {
 		return;
 	}
 
-	remove(EGL_NODE);
+	remove(dev);
 #endif
 
 	if (bind(lfd, (const struct sockaddr*) &sockAddr, sizeof(sockAddr)) < 0) {
-		perror("server bind()");
-		return;
-	}
-	if (listen(lfd, 5) < 0) {
-		perror("server listen()");
-		return;
-	}
-	state = 1;
-
-	if (pthread_create(&read_thread, NULL, thread_read, this) != 0) {
-		perror("read thread creation failed");
-		return;
-	}
-
-	buf = 0;
-	DMSG((STDOUT,"prepare to read name_socket : %s\n",EGL_NODE));
-}
-
-name_socket::name_socket(char *dev) {
-	struct sockaddr_un sockAddr;
-	socklen_t sockLen;
-	int result = 1;
-
-	state = 0;
-	lfd = clientSock = -1;
-
-	if (makeAddr(dev, &sockAddr, &sockLen) < 0)
-		return;
-	lfd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (lfd < 0) {
-		perror("client socket()");
-		return;
-	}
-
-	remove(dev);
-
-	if (bind(lfd, (const struct sockaddr*) &sockAddr, sockLen) < 0) {
 		perror("server bind()");
 		return;
 	}

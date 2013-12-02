@@ -555,23 +555,30 @@ static e_int32 register_file_format(data_adapter_t *da, int i) {
 #endif
 
 #if HAS_LIBPCL
-static e_int32 inter_pcl_open(file_ptr_t *file)
-{
-	if ( file->info.mode == E_READ ) {
-		pcl::PointCloud<pcl::PointXYZ> * cloud = new pcl::PointCloud<pcl::PointXYZ>();
-		if ( pcl::io::loadPCDFile<pcl::PointXYZ>("test_pcd.pcd", *cloud) == -1 ) //打开点云文件
-		{
+
+#define PCL_HAS_I 1
+#if PCL_HAS_I
+#define PCL_PNT_TYPE pcl::PointXYZI
+#else
+#define PCL_PNT_TYPE pcl::PointXYZ
+#endif
+
+static e_int32 inter_pcl_open(file_ptr_t *file) {
+	if (file->info.mode == E_READ) {
+		pcl::PointCloud<PCL_PNT_TYPE> * cloud =
+				new pcl::PointCloud<PCL_PNT_TYPE>();
+		if (pcl::io::loadPCDFile<PCL_PNT_TYPE>("test_pcd.pcd", *cloud) == -1) //打开点云文件
+				{
 			PCL_ERROR("Couldn't read file test_pcd.pcd\n");
 			return (-1);
 		}
 		file->handle = (size_t) cloud;
 		file->info.width = cloud->width;
 		file->info.height = cloud->height;
-	}
-	else
-	{
+	} else {
 		//打开缓存
-		pcl::PointCloud<pcl::PointXYZ>* cloud = new pcl::PointCloud<pcl::PointXYZ>();
+		pcl::PointCloud<PCL_PNT_TYPE>* cloud =
+				new pcl::PointCloud<PCL_PNT_TYPE>();
 		// 创建点云缓存
 		cloud->width = file->info.width;
 		cloud->height = file->info.height;
@@ -582,12 +589,11 @@ static e_int32 inter_pcl_open(file_ptr_t *file)
 
 	return E_OK;
 }
-static e_int32 inter_pcl_combine(file_ptr_t *file1, file_ptr_t *file2)
-{
-	pcl::PointCloud<pcl::PointXYZ> *cloud1 =
-	(pcl::PointCloud<pcl::PointXYZ> *) (pcl::PointCloud<pcl::PointXYZ> *) file1->handle;
-	pcl::PointCloud<pcl::PointXYZ> *cloud2 =
-	(pcl::PointCloud<pcl::PointXYZ> *) (pcl::PointCloud<pcl::PointXYZ> *) file2->handle;
+static e_int32 inter_pcl_combine(file_ptr_t *file1, file_ptr_t *file2) {
+	pcl::PointCloud<PCL_PNT_TYPE> *cloud1 =
+			(pcl::PointCloud<PCL_PNT_TYPE> *) (pcl::PointCloud<PCL_PNT_TYPE> *) file1->handle;
+	pcl::PointCloud<PCL_PNT_TYPE> *cloud2 =
+			(pcl::PointCloud<PCL_PNT_TYPE> *) (pcl::PointCloud<PCL_PNT_TYPE> *) file2->handle;
 
 	(*cloud1) += (*cloud2);
 
@@ -595,18 +601,21 @@ static e_int32 inter_pcl_combine(file_ptr_t *file1, file_ptr_t *file2)
 	return E_OK;
 }
 static e_int32 inter_pcl_close(file_ptr_t *file, int save) {
-	pcl::PointCloud<pcl::PointXYZ> *cloud =
-	(pcl::PointCloud<pcl::PointXYZ> *) file->handle;
-	if ( save && file->info.mode == E_WRITE ) {
-		pcl::io::savePCDFileASCII(file->info.file_name, *cloud);
+	pcl::PointCloud<PCL_PNT_TYPE> *cloud =
+			(pcl::PointCloud<PCL_PNT_TYPE> *) file->handle;
+	if (save && file->info.mode == E_WRITE) {
+//		pcl::io::savePCDFileASCII(file->info.file_name, *cloud);
+		pcl::io::savePCDFileBinary(file->info.file_name, *cloud);
 	}
 	delete cloud;
 	return E_OK;
 }
-static e_int32 inter_pcl_write_point(file_ptr_t *file, int x, int y, point_t* point) {
+static e_int32 inter_pcl_write_point(file_ptr_t *file, int x, int y,
+		point_t* point) {
 	return E_ERROR;
 }
-static e_int32 inter_pcl_write_row(file_ptr_t *file, e_uint32 row_idx, point_t* point) {
+static e_int32 inter_pcl_write_row(file_ptr_t *file, e_uint32 row_idx,
+		point_t* point) {
 	return E_ERROR;
 }
 static e_int32 inter_pcl_write_column(file_ptr_t *file, e_uint32 column_idx,
@@ -616,33 +625,41 @@ static e_int32 inter_pcl_write_column(file_ptr_t *file, e_uint32 column_idx,
 
 static point_xyz_t* transfor2xyz(point_t* pnts, int i, point_xyz_t *xyz) {
 	switch (pnts->type) {
-		case PNT_TYPE_XYZ:
+	case PNT_TYPE_XYZ:
 		return ((point_xyz_t*) pnts->mem) + i;
-		case PNT_TYPE_POLAR:
-		{
-			point_polar_t *polar = (point_polar_t*) pnts->mem;
-			hd_polar2xyz(&xyz->x, &xyz->y, &xyz->z,
-					polar[i].distance, polar[i].angle_h, polar[i].angle_v);
-			return xyz;
-		}
-		default:
+	case PNT_TYPE_POLAR: {
+		point_polar_t *polar = (point_polar_t*) pnts->mem;
+		hd_polar2xyz(&xyz->x, &xyz->y, &xyz->z, polar[i].distance,
+				polar[i].angle_h, polar[i].angle_v);
+#if PCL_HAS_I
+		xyz->intensity = polar[i].intensity;
+#endif
+//		if(xyz->x<0 || xyz->y<0 || xyz->intensity>700)
+//			DMSG((STDOUT,"[%f,%f,%f]\n",polar[i].distance,
+//				polar[i].angle_h, polar[i].angle_v));
+		return xyz;
+	}
+	default:
 		DMSG((STDOUT,"transfor2xyz ERROR \n"));
 		return NULL;
 	}
 }
 
-static e_int32 inter_pcl_append_points(file_ptr_t *file, point_t* pnts, int pt_num) {
-	pcl::PointCloud<pcl::PointXYZ> *cloud =
-	(pcl::PointCloud<pcl::PointXYZ> *) (pcl::PointCloud<pcl::PointXYZ> *) file->handle;
+static e_int32 inter_pcl_append_points(file_ptr_t *file, point_t* pnts,
+		int pt_num) {
+	pcl::PointCloud<PCL_PNT_TYPE> *cloud =
+			(pcl::PointCloud<PCL_PNT_TYPE> *) (pcl::PointCloud<PCL_PNT_TYPE> *) file->handle;
 	int idx = 0;
 	point_xyz_t xyz, *pxyz;
 
-	while (pt_num--)
-	{
+	while (pt_num--) {
 		pxyz = transfor2xyz(pnts, idx, &xyz);
 		cloud->points[file->cousor].x = pxyz->x;
 		cloud->points[file->cousor].y = pxyz->y;
 		cloud->points[file->cousor].z = pxyz->z;
+#if PCL_HAS_I
+		cloud->points[file->cousor].intensity = pxyz->intensity;
+#endif
 		file->cousor++;
 		idx++;
 	}
@@ -656,12 +673,12 @@ static e_int32 inter_pcl_append_column(file_ptr_t *file, point_t* point) {
 	return E_ERROR;
 }
 
-static e_int32 inter_pcl_read_points(file_ptr_t *file, point_t* pnts, int buf_len) {
-	pcl::PointCloud<pcl::PointXYZ> *cloud =
-	(pcl::PointCloud<pcl::PointXYZ> *) file->handle;
+static e_int32 inter_pcl_read_points(file_ptr_t *file, point_t* pnts,
+		int buf_len) {
+	pcl::PointCloud<PCL_PNT_TYPE> *cloud =
+			(pcl::PointCloud<PCL_PNT_TYPE> *) file->handle;
 	point_xyz_t *point = (point_xyz_t*) pnts->mem;
-	while (buf_len--)
-	{
+	while (buf_len--) {
 		point->x = cloud->points[file->cousor].x;
 		point->y = cloud->points[file->cousor].y;
 		point->z = cloud->points[file->cousor].z;
@@ -670,7 +687,8 @@ static e_int32 inter_pcl_read_points(file_ptr_t *file, point_t* pnts, int buf_le
 	}
 	return E_OK;
 }
-static e_int32 inter_pcl_read_row(file_ptr_t *file, e_uint32 row_idx, point_t* buf) {
+static e_int32 inter_pcl_read_row(file_ptr_t *file, e_uint32 row_idx,
+		point_t* buf) {
 	return E_ERROR;
 }
 static e_int32 inter_pcl_read_column(file_ptr_t *file, e_uint32 column_idx,
@@ -741,19 +759,19 @@ static e_int32 inter_pcl_close(file_ptr_t *file, int save) {
 	DMSG((STDOUT,"inter_pcl_close try close:%s",file->info.file_name));
 
 	switch (file->info.mode) {
-	case E_READ:
-	case E_WRITE:
-	case E_DWRITE:
+		case E_READ:
+		case E_WRITE:
+		case E_DWRITE:
 		fclose(f1);
 		DMSG((STDOUT,"inter_pcl_close save file:%s",file->info.file_name));
 		break;
-	case -1:
+		case -1:
 		fclose(f1);
 		fi_delete(file->info.file_name);
 		DMSG(
 				(STDOUT,"inter_pcl_close delete tmp file:%s",file->info.file_name));
 		break;
-	default:
+		default:
 		DMSG((STDOUT,"ERROR file.info.mode"));
 	}
 
@@ -776,13 +794,13 @@ static e_int32 inter_pcl_write_column(file_ptr_t *file, e_uint32 column_idx,
 static point_xyz_t* transfor2xyz(point_t* pnts, int i, point_xyz_t *xyz) {
 	point_polar_t *polar = (point_polar_t*) pnts->mem;
 	switch (pnts->type) {
-	case PNT_TYPE_XYZ:
+		case PNT_TYPE_XYZ:
 		return ((point_xyz_t*) pnts->mem) + i;
-	case PNT_TYPE_POLAR:
+		case PNT_TYPE_POLAR:
 		hd_polar2xyz(&xyz->x, &xyz->y, &xyz->z, polar[i].distance,
 				polar[i].angle_h, polar[i].angle_v);
 		return xyz;
-	default:
+		default:
 		DMSG((STDOUT,"transfor2xyz ERROR \n"));
 		return NULL;
 	}
@@ -970,15 +988,6 @@ static e_int32 inter_hls_read_column(file_ptr_t *file, e_uint32 column_idx,
 //JPG
 static e_int32 inter_jpg_open(file_ptr_t *file) {
 	if (file->info.mode == E_READ) {
-//		pcl::PointCloud < pcl::PointXYZ > *cloud = new pcl::PointCloud<pcl::PointXYZ>();
-//		if (pcl::io::loadPCDFile < pcl::PointXYZ > ("test_pcd.pcd", *cloud) == -1) //打开点云文件
-//				{
-//			PCL_ERROR("Couldn't read file test_pcd.pcd\n");
-//			return (-1);
-//		}
-//		file->handle = (size_t) cloud;
-//		file->info.width = cloud->width;
-//		file->info.height = cloud->height;
 		return E_ERROR;
 	} else {
 		//打开缓存
@@ -1031,7 +1040,6 @@ static e_int32 inter_jpg_combine(file_ptr_t *file1, file_ptr_t *file2) {
 	file2->info.mode = -1; //不需保存
 	return E_OK;
 }
-
 
 static e_int32 inter_jpg_close(file_ptr_t *file, int save) {
 	e_uint8 *jpg = (e_uint8 *) file->handle;
@@ -1337,14 +1345,7 @@ static e_int32 inter_sprite_open(file_ptr_t *file) {
 			return ret;
 		}
 
-		ret = sc_select(&sprite->connect, E_WRITE, 100000);
-		if (e_failed(ret)) {
-			sc_close(&sprite->connect);
-			free(sprite);
-			return ret;
-		}
-
-		ret = sc_send(&sprite->connect, buf, 26);
+		ret = sc_send_ex(&sprite->connect, buf, 26, 1e6, NULL);
 		if (e_failed(ret)) {
 			sc_close(&sprite->connect);
 			free(sprite);
@@ -1473,13 +1474,12 @@ static e_int32 _sprite_insert_frame(file_ptr_t *file) {
 		return 1;
 	}
 
-	ret = sc_select(&sprite->connect, E_WRITE, 1E6);
-	e_assert(ret > 0, ret);
-
 	if (file->info.mode != E_DWRITE)
-		ret = sc_send(&sprite->connect, sprite->buf, sprite->size);
+		ret = sc_send_ex(&sprite->connect, sprite->buf, sprite->size, 1e6,
+				NULL);
 	else
-		ret = sc_send(&sprite->connect, sprite->buf, sprite->size * 2);
+		ret = sc_send_ex(&sprite->connect, sprite->buf, sprite->size * 2, 1e6,
+				NULL);
 	e_assert(ret > 0, ret);
 	return E_OK;
 }
@@ -1561,38 +1561,18 @@ static e_int32 inter_sprite_on_data_change(file_ptr_t *file1,
 ///////////////////////////////////////////////////////////////////////////////
 //memgray
 #include <comm/hd_utils.h>
-
-display_t display = { 0 };
-
 typedef struct memgray_private_t {
 	e_uint32 size;
 	e_uint8 * buf;
 } memgray_private_t;
-
-extern display_t display;
 
 static e_int32 inter_memgray_open(file_ptr_t *file) {
 	//打开缓存
 	memgray_private_t *memgray = (memgray_private_t *) calloc(
 			sizeof(memgray_private_t), 1);
 	int size = file->info.width * file->info.height;
-
-	if (file->is_main) {
-		display.w =
-				file->info.mode == E_DWRITE ?
-						file->info.width * 2 : file->info.width;
-		display.h = file->info.height;
-		DMSG((STDOUT,"Success to create memgray.\n"));
-	}
-
-	if (file->is_main && file->info.mode == E_DWRITE) //主文件用于文件合并
-			{
-		display.buf = (e_uint8 *) calloc(size, 2);
-	}
-
-	display.h_w = file->info.h_w;
-
 	memgray->buf = (e_uint8 *) calloc(size, 1);
+	e_assert(memgray->buf, E_ERROR_BAD_ALLOCATE);
 	memgray->size = size;
 	file->handle = (size_t) memgray;
 	return E_OK;
@@ -1659,7 +1639,11 @@ static e_int32 inter_memgray_close(file_ptr_t *file, int save) {
 }
 
 static e_int32 _memgray_insert_frame(file_ptr_t *file) {
+	memgray_private_t *memgray;
 	e_assert(file->is_main&&display.buf, E_ERROR);
+	memgray = (memgray_private_t *) file->handle;
+	e_assert(memgray&&memgray->buf, E_ERROR);
+	memcpy(display.buf, memgray->buf, file->info.width * file->info.height);
 	return E_OK;
 }
 static e_int32 inter_memgray_write_point(file_ptr_t *file, int x, int y,
@@ -1724,8 +1708,15 @@ static e_int32 inter_memgray_read_column(file_ptr_t *file, e_uint32 column_idx,
 static e_int32 inter_memgray_on_data_change(file_ptr_t *file1,
 		file_ptr_t *file2) {
 	e_int32 ret;
-	ret = inter_memgray_combine(file1, file2);
-	e_assert(ret>0, ret);
+
+	if (file1->info.mode == E_DWRITE || file2->info.mode == E_DWRITE) {
+		ret = inter_memgray_combine(file1, file2);
+		e_assert(ret>0, ret);
+	} else {
+		ret = _memgray_insert_frame(file1);
+		e_assert(ret>0, ret);
+	}
+
 	return E_OK;
 }
 

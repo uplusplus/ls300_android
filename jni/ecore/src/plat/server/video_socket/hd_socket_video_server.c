@@ -34,19 +34,25 @@
 #include <comm/hd_utils.h>
 #include <jpg/hd_jpeg.h>
 
+//#ifdef DMSG
+//#undef DMSG
+//#define DMSG
+//#endif
+
 static struct video_server_t {
 
 	ethread_t* thread_loop;
 	char address[MAX_PATH_LEN];
 	int port;
 	int socket_type;
+	int last_hash;
 
 	int loop;
 } video_server;
 
 #define FPS_DELAY 1000 //ms
 static void server_loop(void* vs) {
-	int ret;
+	int ret, bytes_to_send, err, size;
 	video_server.loop = 1;
 	hd_connect_t connect;
 	char buf[100];
@@ -56,44 +62,37 @@ static void server_loop(void* vs) {
 	for (; video_server.loop;) {
 		while (!(display.w && display.h && display.buf))
 			sleep(1); //首次连接，显示未就绪，等待
-
+		size = display.h * display.w;
 		sprintf((char*) buf, "ABCD%05d%05d%08.2fEFGH", display.w, display.h,
 				display.h_w);
-		do {
-			ret = sc_open_socket(&connect, video_server.address,
-					video_server.port, video_server.socket_type);
-			if (ret > 0)
-				ret = sc_try_connect(&connect, 65535);
 
-			DMSG((STDOUT,"server_loop connected to server.\n"));
+		ret = sc_open_socket(&connect, video_server.address, video_server.port,
+				video_server.socket_type);
+		if (ret > 0)
+			ret = sc_try_connect(&connect, 65535);
 
-			//发送长宽信息
-			if (ret > 0)
-				ret = sc_select(&connect, E_WRITE, 100000);
-			if (ret > 0)
-				ret = sc_send(&connect, buf, 26);
+		DMSG((STDOUT, "server_loop connected to server.\n"));
 
-			DMSG((STDOUT,"server_loop start frame send loop.\n"));
-			if (ret > 0) {
-				for (;video_server.loop;) { //定时发送帧数据
-					ret = sc_select(&connect, E_WRITE, 1E6);
-//					DMSG((STDOUT,"server_loop sc_select ret %d.\n",ret));
-					if (ret == E_ERROR_TIME_OUT)
-						continue;
-					else if (ret > 0)
-						ret = sc_send(&connect, display.buf,
-								display.h * display.w);
+		//发送长宽信息
+		ret = sc_send_ex(&connect, buf, 26, 1e6, &video_server.loop);
+		DMSG((STDOUT, "server_loop start frame send loop.\n"));
+		video_server.last_hash = -1;
+		if (ret > 0) {
+			for (; video_server.loop;) { //定时发送帧数据
+				if (display.hash != video_server.last_hash) {
+					ret = sc_send_ex(&connect, display.buf, size, 1e6,
+							&video_server.loop);
 					if (ret <= 0)
 						break;
-					Delay(FPS_DELAY);
-//					DMSG((STDOUT,"server_loop send a frame.\n"));
+					video_server.last_hash = display.hash;
 				}
+				Delay(FPS_DELAY);
+//				DMSG((STDOUT,"server_loop send a frame.\n"));
 			}
+		}
 
-			if (ret <= 0)
-				sc_close(&connect);
-			DMSG((STDOUT,"server_loop disconnected,reset.\n"));
-		} while (ret <= 0); //连接，显示服务器未就绪，等待
+		sc_close(&connect);
+		DMSG((STDOUT, "server_loop disconnected,reset.\n"));
 	}
 	DMSG((STDOUT, "socket video server loop routine stoped...\r\n"));
 }

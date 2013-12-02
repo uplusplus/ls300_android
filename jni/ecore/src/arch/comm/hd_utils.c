@@ -31,11 +31,34 @@ e_uint8 hd_compute_xor(const e_uint8 * const data, const e_uint32 length) {
 	return checksum;
 }
 
-void hd_polar2xyz(float *x, float *y, float *z, double distance, float angle_h,
-		float angle_v) {
-	angle_v = (angle_v-(double)90.0) * M_PI/180.0;
-	angle_h = (double)angle_h * M_PI/180.0;
+void hd_polar2xyz(float *x, float *y, float *z, double distance, double angle_h,
+		double angle_v) {
+	angle_v = (angle_v - (double) 90.0) * M_PI / 180.0;
+	angle_h = (double) angle_h * M_PI / 180.0;
 	(*x) = distance * 1e3 * cos(angle_v) * cos(angle_h) / 1e3;
 	(*y) = distance * 1e3 * cos(angle_v) * sin(angle_h) / 1e3;
 	(*z) = distance * 1e3 * sin(angle_v) / 1e3;
+}
+
+void hd_print_image(e_uint8* msg, int w,int h) {
+	char c, l = 0;
+	int i,j,count=0;
+	for(i=0;i<h;i++)
+	{
+		l = 0; count=0;
+		for(j=0;j<w;j++){
+			c = *msg++;
+			if ( (c&&l) || (!c&&!l) ) {
+			    count++;
+			} else {
+				if (count > 0)
+					DMSG((STDOUT, " %c[%d]", l? '*' : '0', count));
+				l = c;
+				count = 1;
+			}
+		}
+		if (count > 0)
+			DMSG((STDOUT, " %c[%d]", l? '*' : '0', count));
+		DMSG((STDOUT, "\n"));
+	}
 }

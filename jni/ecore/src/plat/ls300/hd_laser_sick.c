@@ -30,6 +30,7 @@ struct laser_sick_t {
 	//垂直方向
 	e_uint32 height;
 	e_uint32 speed_v; // hz
+	e_uint32 interlace_v;
 	e_float64 resolution_v;
 	e_float64 start_angle_v[2]; //垂直起始角度，这里暂时固定分为两个扇区
 	e_float64 end_angle_v[2]; //垂直终止角度
@@ -44,14 +45,16 @@ struct laser_sick_t {
 	} active_sectors;
 
 	//外部指针，引用的。
-	point_t *points_xyz;
+	point_t *points_polar;
 	point_t *points_gray;
+	scan_data_t * scan_data_buf;
 
 	//临时记录
-	e_float32 angle_dif_per_cloumn;
-	e_float32 angle_dif_per_degree;
+	e_float64 angle_dif_per_cloumn;
+	e_float64 angle_dif_per_degree;
 	e_uint32 slip_idx;
-	e_float32 pre_scan_angle;
+	e_uint32 slip_tick;
+	e_float64 pre_scan_angle;
 
 	e_float32 h_w; //图像真实高宽比
 
@@ -73,20 +76,27 @@ static enum {
 ////////////////////////////////////////////////////////////////////////////////
 //local definations
 #define PRE_SCAN_WAIT_TIME  5000000 //us
-#define HACK_INVALID_DATA 1
+//#define HACK_INVALID_DATA 1
 //#define HACK_PNT_ANGLE_H 1
-#define HACK_SLIP_ANGLE 1
+//#define HACK_SLIP_ANGLE 1
 //#define HACK_SLIP_IDX 1
+#define HACK_SICK_BUGS 1
+
+#define DEBUG_TIME 1
 
 ////////////////////////////////////////////////////////////////////////////////
 //local functions
 #define should_continue (ls->state==STATE_WORK)
+
 static e_int32 inter_ls_scan(laser_sick_t *ls);
 static e_int32 thread_scan_func(laser_sick_t *ls);
 static e_int32 filter_data(laser_sick_t *ls, scan_data_t * pdata);
 static void write_pool_data_routine(laser_sick_t *ls);
 static void read_pool_data_routine(laser_sick_t *ls);
 static void print_config(laser_sick_t* ls);
+
+static int f2r(int speed);
+static int r2f(int speed);
 
 e_int32 ls_init(laser_sick_t **lsp, laser_control_t *lc, sickld_t *sick,
 		e_int32 (*on_status_change)(void*, int), void* ctx) {
@@ -125,8 +135,8 @@ e_int32 ls_uninit(laser_sick_t *ls) {
 e_int32 ls_scan(laser_sick_t *ls, char* ptDir, char *grayDir, char *files_dir,
 		e_uint32 speed_h_delay, const e_float64 start_angle_h,
 		const e_float64 end_angle_h, e_uint32 speed_v_hz,
-		e_float64 resolution_v, const e_float64 start_angle_v,
-		const e_float64 end_angle_v) {
+		e_float64 resolution_v, const e_uint32 interlace_v,
+		const e_float64 start_angle_v, const e_float64 end_angle_v) {
 	e_int32 ret;
 	e_assert(ls && ls->state == STATE_IDLE, E_ERROR_INVALID_STATUS);
 
@@ -135,7 +145,7 @@ e_int32 ls_scan(laser_sick_t *ls, char* ptDir, char *grayDir, char *files_dir,
 	ls->on_status_change(ls->ctx, ls->state);
 
 	ret = ls_phrase_config(ls, speed_h_delay, start_angle_h, end_angle_h,
-			speed_v_hz, resolution_v, start_angle_v, end_angle_v);
+			speed_v_hz, resolution_v, interlace_v, start_angle_v, end_angle_v);
 	if (ret <= 0) {
 		DMSG((STDOUT, "ls_phrase_config failed!\r\n"));
 		ls->state = STATE_IDLE;
@@ -152,7 +162,7 @@ e_int32 ls_scan(laser_sick_t *ls, char* ptDir, char *grayDir, char *files_dir,
 		ls->state = STATE_IDLE;
 		return E_ERROR;
 	}
-	ret = dm_alloc_buffer(ls->writer, DATA_BLOCK_TYPE_COLUMN, &ls->points_xyz,
+	ret = dm_alloc_buffer(ls->writer, DATA_BLOCK_TYPE_COLUMN, &ls->points_polar,
 			&ls->points_gray);
 	if (e_failed( ret )) {
 		DMSG((STDOUT, "dm_alloc_buffer failed!\r\n"));
@@ -160,6 +170,7 @@ e_int32 ls_scan(laser_sick_t *ls, char* ptDir, char *grayDir, char *files_dir,
 		return E_ERROR;
 	}
 	ls->slip_idx = 0;
+	ls->slip_tick = 0;
 
 	DMSG((STDOUT, "scan job routine starting read routine...\r\n"));
 	//check priv
@@ -202,10 +213,12 @@ static e_int32 thread_scan_func(laser_sick_t *ls) {
 	void* result;
 	ret = inter_ls_scan(ls);
 
-	DMSG((STDOUT,"sick main thread try wait sub thread....\n"));
-	//等待子线程
-	pthread_join(ls->thread_write->thread_id, &result);
-	pthread_join(ls->thread_read->thread_id, &result);
+	if (ret > 0) {
+		DMSG((STDOUT,"sick main thread try wait sub thread....\n"));
+		//等待子线程
+		pthread_join(ls->thread_write->thread_id, &result);
+		pthread_join(ls->thread_read->thread_id, &result);
+	}
 
 	DMSG(
 			(STDOUT,"sick main thread all sub thread quit,try stop devices....\n"));
@@ -217,8 +230,12 @@ static e_int32 thread_scan_func(laser_sick_t *ls) {
 	ret = sld_uninitialize(ls->sick);
 	e_check(ret<=0);
 
+	//等待数据刷新完毕
+	Delay(1000);
+
 	DMSG((STDOUT,"sick main thread save files.... state:%d\n",ls->state));
-	dm_free(ls->writer, ls->state == STATE_DONE); //写入文件
+//	dm_free(ls->writer, ls->state == STATE_DONE); //写入文件
+	dm_free(ls->writer, true); //写入文件
 	ls->state = STATE_IDLE;
 	DMSG((STDOUT,"sick main thread sounds on_status_change....\n"));
 	ls->on_status_change(ls->ctx, ls->state);
@@ -229,14 +246,16 @@ static e_int32 inter_ls_scan(laser_sick_t *ls) {
 	e_int32 ret;
 
 	//提交配置到控制板
-	ret = hl_turntable_config(ls->control, ls->speed_h, ls->start_angle_h,
+//	ret = hl_turntable_config(ls->control, ls->speed_h, ls->start_angle_h,
+//			ls->end_angle_h + ls->pre_scan_angle);
+	ret = hl_turntable_config(ls->control, r2f(ls->speed_h), ls->start_angle_h,
 			ls->end_angle_h + ls->pre_scan_angle);
 	e_assert(ret>0, ret);
 
-
 	//开始真正数据采集前的准备工作,快速转动转台到0点
-	ret = hl_search_zero(ls->control);
-	e_assert(ret>0 && should_continue, ret);
+//	ret = hl_search_zero(ls->control);
+//	e_assert(ret>0 && should_continue, ret);
+//	Delay(100);
 
 	//开始真正数据采集前的准备工作,快速转动转台到需要的启始位置
 	ret = hl_turntable_prepare(ls->control, ls->pre_scan_angle);
@@ -246,8 +265,9 @@ static e_int32 inter_ls_scan(laser_sick_t *ls) {
 	ret = sld_initialize(ls->sick);
 	e_assert(ret>0 && should_continue, ret);
 
-	ret = sld_set_global_params_and_scan_areas(ls->sick, ls->speed_v,
-			ls->resolution_v, ls->start_angle_v, ls->end_angle_v,
+	ret = sld_set_global_params_and_scan_areas_interlace(ls->sick, ls->speed_v,
+			ls->resolution_v, ls->interlace_v, ls->start_angle_v,
+			ls->end_angle_v,
 			ls->active_sectors.left + ls->active_sectors.right);
 	e_assert(ret>0 && should_continue, ret);
 
@@ -296,11 +316,11 @@ static e_int32 inter_ls_scan(laser_sick_t *ls) {
  */
 e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 		const e_float64 start_angle_h, const e_float64 end_angle_h,
-		e_uint32 speed_v, e_float64 resolution_v,
+		e_uint32 speed_v, e_float64 resolution_v, e_uint32 interlace_v,
 		const e_float64 active_sector_start_angle,
 		const e_float64 active_sector_stop_angle) {
 
-	e_assert(ls&&ls->state, E_ERROR_INVALID_HANDLER);
+	e_assert(ls, E_ERROR_INVALID_HANDLER);
 
 	e_assert(
 			active_sector_start_angle<=90 && active_sector_start_angle>=-45 && active_sector_stop_angle<=90 && active_sector_stop_angle>=-45 && active_sector_stop_angle > active_sector_start_angle,
@@ -314,7 +334,8 @@ e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 	ls->end_angle_h = end_angle_h;
 	ls->speed_v = speed_v;
 	ls->resolution_v = resolution_v;
-	ls->speed_h = speed_h;
+	ls->interlace_v = interlace_v;
+	ls->speed_h = f2r(speed_h);
 
 	//挖个坑,先把第二个角度记下
 	ls->start_angle_v[1] = 360 - ls->end_angle_v[0];
@@ -322,7 +343,7 @@ e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 
 	if (ls->end_angle_v[0] >= 180) { //限制了,垂直角度为 -45~+90 度之间
 		ls->end_angle_v[0] = 180; //中间点放到前面
-		ls->start_angle_v[1] = 180 + ls->resolution_v;
+		ls->start_angle_v[1] = 180 + ls->resolution_v * ls->interlace_v;
 	}
 
 	//只会用到0号
@@ -331,13 +352,8 @@ e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 		//都在左边时，此种情况下，控制板的水平角度不用做换算，保持不变
 		ls->active_sectors.left = 1;
 		ls->active_sectors.right = 0;
-	} //会用到0,1号
-	else if (ls->start_angle_h < 180 && ls->end_angle_h > 180) //左右皆有
-			{
-		ls->end_angle_h = ls->start_angle_h + 180.0;
-		ls->active_sectors.left = 1;
-		ls->active_sectors.right = 1;
-	} //只用到2号
+	}
+	//只用到1号
 	else if (ls->start_angle_h >= 180 && ls->end_angle_h > 180) //都在右边
 			{
 		ls->start_angle_v[0] = ls->start_angle_v[1];
@@ -346,15 +362,31 @@ e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 		ls->end_angle_h = ls->end_angle_h - 180;
 		ls->active_sectors.left = 0;
 		ls->active_sectors.right = 1;
+	}
+	//对于超过180，直接全景
+	else if (ls->end_angle_h - ls->start_angle_h > 180) {
+		ls->end_angle_h = ls->start_angle_h + 180.0;
+		ls->active_sectors.left = 1;
+		ls->active_sectors.right = 1;
+	}
+	//对于小于180，可以在一边
+	else if (ls->start_angle_h < 180 && ls->end_angle_h > 180) {
+//		ls->end_angle_h = ls->start_angle_h + 180.0;
+		ls->active_sectors.left = 1;
+//		ls->active_sectors.right = 1;
 	} else {
 		DMSG((STDOUT,"cal_h_angle EXTRAM FAILT!\r\n"));
 		return E_ERROR;
 	}
 
 	ls->height = (ls->end_angle_v[0] - ls->start_angle_v[0]) / ls->resolution_v
-			+ 1;
-	ls->width = ANGLE_TO_STEP( ls->end_angle_h - ls->start_angle_h )
-			* PULSE_SPEED_TO_STEP_TIME(ls->speed_h) / 1E6 * ls->speed_v + 1;
+			+ ls->interlace_v;
+//	ls->width = (ANGLE_TO_STEP( ls->end_angle_h - ls->start_angle_h )
+//			* PULSE_SPEED_TO_STEP_TIME(ls->speed_h) * ls->speed_v / 1E6)
+//			/ ls->interlace_v + 1;
+	ls->width = (ANGLE_TO_STEP( ls->end_angle_h - ls->start_angle_h ) / 1e2
+			* PULSE_SPEED_TO_STEP_TIME(ls->speed_h) * ls->speed_v / 1E4)
+			/ ls->interlace_v + 1;
 	ls->pre_scan_angle =
 			STEP_TO_ANGLE(PRE_SCAN_WAIT_TIME / PULSE_SPEED_TO_STEP_TIME(ls->speed_h));
 	ls->angle_dif_per_cloumn =
@@ -370,24 +402,60 @@ e_int32 ls_phrase_config(laser_sick_t *ls, e_uint32 speed_h,
 	return E_OK;
 }
 
+static void print_sdata(laser_sick_t *ls, scan_data_t *sdata) {
+	int i, idx = 0, dof;
+
+	DMSG(
+			(STDOUT,"{profile_number=%u, layer_num=%u}\n",sdata->profile_number,sdata->layer_num));
+	if (ls->active_sectors.left) {
+		DMSG((STDOUT,"[sector=%d]\n",idx));
+		dof = sdata->sector_data_offsets[idx];
+		for (i = 0; i < sdata->num_measurements[idx]; i++) {
+			DMSG(
+					(STDOUT,"\t[%d] %f, %f, %u]\n",i, sdata->range_measurements[dof+i],sdata->angle_measurements[dof+i],(unsigned int)sdata->echo_measurements[dof+i]));
+		}
+		idx++;
+	}
+	if (ls->active_sectors.right) {
+		DMSG((STDOUT,"[sector=%d]\n",idx));
+		dof = sdata->sector_data_offsets[idx];
+		for (i = 0; i < sdata->num_measurements[idx]; i++) {
+			DMSG(
+					(STDOUT,"\t[%d] %f, %f, %u]\n",i, sdata->range_measurements[dof+i],sdata->angle_measurements[dof+i],(unsigned int)sdata->echo_measurements[dof+i]));
+		}
+		idx++;
+	}
+}
+
+
 static void write_pool_data_routine(laser_sick_t *ls) {
-	e_int32 ret, flag = 1;
-	e_float32 angle_dif, started_angle; //记录起始位置，保证180度是对齐的
+	e_int32 ret, first_time = 1, delay, profile_number;
+	e_float64 angle_dif, started_angle, before_angle; //记录起始位置，保证180度是对齐的
 	scan_data_t sdata = { 0 };
+#if DEBUG_TIME
+	e_uint32 start_time;
+#endif
+
 	DMSG((STDOUT,"scan job:write_data_routine start.\r\n"));
-
 	angle_dif = ls->angle_dif_per_cloumn;
+	delay = ANGLE_TO_STEP(angle_dif) * PULSE_SPEED_TO_STEP_TIME(ls->speed_h)
+			/ 1e3;
+	before_angle =
+			STEP_TO_ANGLE((630000.0/PULSE_SPEED_TO_STEP_TIME(ls->speed_h)));
 
+	ret = sld_set_sensor_mode_to_rotate(ls->sick);
+	e_assert(ret>0);
+
+	DMSG((STDOUT,"control trun to start angle...\n"));
 //等待扫描仪就位,会有准备工作开始
 	do {
 //		DMSG(
 //				(STDOUT,"sld_get_measurements sick is not in target position: delay and retry. angle_dif_per_cloumn=%f\r\n",angle_dif));
 		sdata.h_angle = hl_turntable_get_angle(ls->control) - ls->pre_scan_angle
 				+ ls->start_angle_h;
-//		DMSG((STDOUT,"control trun to start angle left  %f\n",sdata.h_angle));
-		ret = sld_flush(ls->sick);
-		if (sdata.h_angle > ls->start_angle_h - angle_dif) {
-//		if (sdata.h_angle > ls->start_angle_h + angle_dif*5) {
+//		DMSG((STDOUT,"control trun to start angle:  %f %f\n",sdata.h_angle,before_angle));
+//		ret = sld_flush(ls->sick);
+		if (sdata.h_angle > ls->start_angle_h - before_angle) {
 //			if (ret > 0) {
 //				DMSG((STDOUT,"sld_get_measurements sick is in target position!\r\n Start to get data.\r\n"));
 //				DMSG((STDOUT,"\rWRITE TO FILE: %f end: %f\n",sdata.h_angle,ls->end_angle_h));
@@ -396,15 +464,23 @@ static void write_pool_data_routine(laser_sick_t *ls) {
 //			started_angle = sdata.h_angle;
 			break;
 		}
+		Delay(delay);
 	} while (ls->state == STATE_WORK);
 
+	DMSG((STDOUT,"control now on start angle.start to get data...\n"));
+
+	ret = sld_set_sensor_mode_to_measure_ex(ls->sick);
+	e_assert(ret>0);
+
 	while (ls->state == STATE_WORK) {
+#if DEBUG_TIME
+	start_time = GetTickCount();
+#endif
 		//1先读取水平方向角度
 		sdata.h_angle = hl_turntable_get_angle(ls->control) - ls->pre_scan_angle
 				+ ls->start_angle_h;
-		if (flag) {
+		if (first_time) {
 			started_angle = sdata.h_angle;
-			flag = !flag;
 		}
 
 //		if (sdata.h_angle >= ls->end_angle_h + started_angle + angle_dif) {
@@ -413,40 +489,55 @@ static void write_pool_data_routine(laser_sick_t *ls) {
 //			break;
 //		}
 
-		if (sdata.h_angle <= 0) {
-			DMSG((STDOUT,"angle = %f, leave.",sdata.h_angle));
-			pool_disconnect(&ls->pool);
-			break;
+		if (sdata.h_angle < -1e-6) {
+			DMSG((STDOUT,"angle = %f, leave.\n",sdata.h_angle));
+//			pool_disconnect(&ls->pool);
+//			break;
 		}
 
-		ret = sld_get_measurements(ls->sick, sdata.range_values,
-				sdata.echo_values, sdata.scan_angles, sdata.num_values,
-				sdata.sector_ids, sdata.data_offsets, NULL, NULL, NULL, NULL,
-				NULL);
+		ret = sld_get_measurements_ex(ls->sick, &sdata);
+//		DMSG((STDOUT,"profile_counter=%d profile_number=%d\n",sdata.profile_counter,sdata.profile_number));
+		if (!first_time) {
+			if (profile_number != sdata.profile_number)
+				DMSG((STDOUT,"lost a data layer_num=%d profile_number=%d\n",sdata.layer_num,profile_number));
+		}
+		profile_number = sdata.profile_number + 1;
 
 		if (ret == E_ERROR_TIME_OUT) {
 			DMSG((STDOUT,"sld_get_measurements ERROR: RETRY.\r\n"));
 			Delay(10);
 			continue;
 		} else if (ret <= 0) {
-			DMSG(
-					(STDOUT,"sld_get_measurements sickld is down?ret=%d Out.\r\n",(int)ret));
+			DMSG((STDOUT,"sld_get_measurements sickld is down?ret=%d Out.\r\n",(int)ret));
 			break;
 		}
-
-//		DMSG((STDOUT,"\rWRITE TO FILE: %f end: %f\n",sdata.h_angle,ls->end_angle_h));
+#if DEBUG_TIME
+		DMSG((STDOUT,"Get use %u\n",GetTickCount()-start_time));
+#endif
+//		print_sdata(ls,&sdata);
 		ret = pool_write(&ls->pool, &sdata);
-		if(e_failed(ret)) break;
-
+		if(ret<0)
+			DMSG((STDOUT,"data pool disconnected,write data routine now stop.\n"));
+//		DMSG((STDOUT,"[%d] %f end: %f\n",sdata.profile_number, sdata.h_angle,ls->end_angle_h));
+		first_time = 0;
 	}
-
+	sld_set_sensor_mode_to_idle(ls->sick);
 	DMSG((STDOUT,"scan job:write_data_routine done.\n"));
 }
 
 static void read_pool_data_routine(laser_sick_t *ls) {
 	e_int32 ret;
 	scan_data_t sdata;
+#if DEBUG_TIME
+	e_uint32 start_time;
+#endif
 	DMSG((STDOUT,"scan job:read_data_routine start.\r\n"));
+
+	//创建数据交错缓冲区
+	if (ls->interlace_v > 1)
+		ls->scan_data_buf = (scan_data_t*) malloc(
+				sizeof(scan_data_t) * ls->interlace_v);
+
 	//TODO:更详细的异常处理
 	while (ls->state == STATE_WORK) {
 		ret = pool_read(&ls->pool, &sdata);
@@ -454,9 +545,17 @@ static void read_pool_data_routine(laser_sick_t *ls) {
 			DMSG((STDOUT,"pool has been cleared, leave!\r\n"));
 			break;
 		}
+#if DEBUG_TIME
+		start_time = GetTickCount();
+#endif
 //		DMSG((STDOUT,"read_data_routine read data at angle: %f.\r\n", sdata.h_angle));
 		filter_data(ls, &sdata);
+#if DEBUG_TIME
+		DMSG((STDOUT,"[%d] Phrase data use:%u\n",sdata.layer_num,GetTickCount()-start_time));
+#endif
 	}
+
+	free(ls->scan_data_buf);
 
 	if (e_check(ls->slip_idx != ls->width, "#ERROR# 列数与要求的不一致!\n")) {
 		DMSG(
@@ -469,149 +568,248 @@ static void read_pool_data_routine(laser_sick_t *ls) {
 
 static e_uint16 intensity_filter(e_uint32 echo) {
 //	if (echo < 70 || echo > 700) //反射强度过滤
-//							{
+//	{
 //				echo = 0;
 //	}
 	return echo;
 }
 
 static e_uint8 gray_filter(e_uint32 echo) {
+	if (echo <= 70)
+		return 0;
+	else if (echo > 370)
+		return 255;
 	return (echo - 70) * 255.0 / 300.0;
-	return echo * 255.0 * 2 / 600.0;
 }
 
-static e_int32 one_slip(laser_sick_t* ls, scan_data_t * pdata, e_int32 data_idx,
-		e_uint32 data_num, e_int32 type) {
-//	unsigned int pnt_idx = 0;
-//	unsigned int gray_idx = ls->slip_idx;
+//tick_idx 0...3
+static e_int32 one_slip(laser_sick_t* ls, e_int32 tick_idx, scan_data_t * pdata,
+		e_int32 data_offset, e_uint32 data_num, e_int32 type) {
+
 	point_gray_t* pgray;
 	point_polar_t *ppoint;
-	int k, cidx;
+	int k, cheight;
 
-	if (ls->slip_idx >= ls->width) {
-		DMSG((STDOUT,"ls->slip_idx > ls->width,忽略多余数据\n"));
-		return E_OK;
-	}
+	ppoint = ((point_polar_t*) ls->points_polar->mem) + tick_idx;
+	pgray = ((point_gray_t*) ls->points_gray->mem) + tick_idx;
 
-	ppoint = (point_polar_t*) ls->points_xyz->mem;
-	pgray = (point_gray_t*) ls->points_gray->mem;
-
-	if (e_check(data_num != ls->height && data_num+1 != ls->height, "#ERROR# 点数个数与要求的不一致!\n")) {
+	cheight = ls->height / ls->interlace_v;
+	if (e_check(data_num != cheight && data_num+1 != cheight, "#ERROR# 点数个数与要求的不一致!\n")) {
 		DMSG(
-				(STDOUT,"#ERROR# 点数个数多一个?不可能 data_num[%u] ls->height[%u]\n", (unsigned int)data_num,(unsigned int)ls->height));
+				(STDOUT,"#ERROR# 点数个数多一个?不可能 data_num[%u] ls->height[%u]\n", (unsigned int)data_num,(unsigned int)ls->height/ls->interlace_v));
 		return E_ERROR;
 	}
 
 	if (!type) {
 		for (k = data_num - 1; k >= 0; --k) {
-			ppoint->distance = pdata->range_values[data_idx + k];
-			ppoint->angle_v = pdata->scan_angles[data_idx + k];
+			ppoint->distance = pdata->range_measurements[data_offset + k];
+			ppoint->angle_v = pdata->angle_measurements[data_offset + k];
 			ppoint->angle_h = pdata->h_angle;
+
 #if HACK_PNT_ANGLE_H
 			ppoint->angle_h += ppoint->angle_v * ls->angle_dif_per_degree;
 #endif
+
 			ppoint->intensity = intensity_filter(
-					pdata->echo_values[data_idx + k]);
-			pgray->gray = gray_filter(pdata->echo_values[data_idx + k]);
+					pdata->echo_measurements[data_offset + k]);
+			pgray->gray = gray_filter(
+					pdata->echo_measurements[data_offset + k]);
 
 			if (ppoint->distance <= 0.0000005) {
-				//DMSG((STDOUT,"I"));
+//				DMSG((STDOUT,"I"));
 #ifdef HACK_INVALID_DATA
-				(*ppoint) = *(ppoint - 1);
-				(*pgray) = *(pgray - 1);
+				(*ppoint) = *(ppoint - ls->interlace_v);
+				(*pgray) = *(pgray - ls->interlace_v);
 #endif
 			}
-			ppoint++;
-			pgray++;
+
+			if (ppoint->distance > 22 || ppoint->intensity > 700)
+				DMSG(
+						(STDOUT,"[%d]\t%f\t%f\t%f\t%u\n",k, ppoint->distance,ppoint->angle_h,ppoint->angle_v,(unsigned int)ppoint->intensity));
+
+			ppoint += ls->interlace_v;
+			pgray += ls->interlace_v;
 		} // end for
 	} else {
 #define SHIFT_NUM 0
 		//补一行
-		if (ls->active_sectors.left && ls->active_sectors.right) {
+		if (ls->active_sectors.left && ls->active_sectors.right
+				&& cheight == data_num + 1) {
 			ppoint += SHIFT_NUM + 1;
 			pgray += SHIFT_NUM + 1;
 		}
-		for (k = 0; k < data_num - SHIFT_NUM; ++k) {
-			ppoint->distance = pdata->range_values[data_idx + k];
-			ppoint->angle_v = pdata->scan_angles[data_idx + k];
-			ppoint->angle_h = pdata->h_angle;
 
+		for (k = 0; k < data_num - SHIFT_NUM; ++k) {
+			ppoint->distance = pdata->range_measurements[data_offset + k];
+			ppoint->angle_v = pdata->angle_measurements[data_offset + k];
+			ppoint->angle_h = pdata->h_angle;
 #if HACK_PNT_ANGLE_H
 			ppoint->angle_h += ppoint->angle_v * ls->angle_dif_per_degree;
 #endif
-
 			ppoint->intensity = intensity_filter(
-					pdata->echo_values[data_idx + k]);
-			pgray->gray = gray_filter(pdata->echo_values[data_idx + k]);
+					pdata->echo_measurements[data_offset + k]);
+			pgray->gray = gray_filter(
+					pdata->echo_measurements[data_offset + k]);
 			if (ppoint->distance <= 0.0000005) {
-				//DMSG((STDOUT,"|"));
+
+//				DMSG((STDOUT,"|"));
 #ifdef HACK_INVALID_DATA
-				(*ppoint) = *(ppoint - 1);
-				(*pgray) = *(pgray - 1);
+				(*ppoint) = *(ppoint - ls->interlace_v);
+				(*pgray) = *(pgray - ls->interlace_v);
 #endif
 			}
-			ppoint++;
-			pgray++;
+			if (ppoint->distance > 20 || ppoint->intensity > 700)
+				DMSG(
+						(STDOUT,"[%d]\t%f\t%f\t%f\t%u\n",k, ppoint->distance,ppoint->angle_h,ppoint->angle_v,(unsigned int)ppoint->intensity));
+			ppoint += ls->interlace_v;
+			pgray += ls->interlace_v;
 		} // end for
-	}
-
-#if HACK_SLIP_IDX
-	cidx = ls->width * (pdata->h_angle - ls->start_angle_h)
-			/ (ls->end_angle_h - ls->start_angle_h)+0.5f;
-#else
-	cidx = ls->slip_idx;
-#endif
-	if (!type)
-		DMSG(
-				(STDOUT,"ls->slip_idx == %d/%d cidx=%d  pdata->h_angle=%f \n", ls->slip_idx, ls->width,cidx,pdata->h_angle ));
-
-//if (!bPreScan)
-	{
-		dm_update(ls->writer, cidx, type);
 	}
 
 	return E_OK;
 }
 
+static scan_data_t* add_slip_tick(laser_sick_t* ls, scan_data_t * pdata_in) {
+	int idx = 0, dof, i;
+	e_float64 dif;
+#if HACK_SLIP_ANGLE
+	pdata_in->h_angle = ls->slip_tick * ls->angle_dif_per_cloumn
+	+ ls->start_angle_h;
+#endif
+
+	ls->slip_tick++; //1..4
+	if (ls->interlace_v == 1)
+		return pdata_in;
+
+#if HACK_SICK_BUGS
+	//偶数列的最后一个距离数据是错的。把最后一个数据移到0点
+	//过渡方案，修正这个问题！！！！！！！！！！！！！！！！！！！！！！！！！
+	/*
+	 SICK profile_counter=908,profile_number=1,layer_num=2
+	 SICK profile_counter=909,profile_number=2,layer_num=3
+	 SICK profile_counter=910,profile_number=3,layer_num=0
+	 SICK profile_counter=911,profile_number=4,layer_num=1
+	 *
+	 SICK profile_counter=912,profile_number=5,layer_num=2
+	 SICK profile_counter=913,profile_number=6,layer_num=3
+	 SICK profile_counter=914,profile_number=7,layer_num=0
+	 SICK profile_counter=915,profile_number=8,layer_num=1
+	 *
+	 * */
+	if (0 == pdata_in->layer_num % 2) {
+		if (ls->active_sectors.left) {
+			pdata_in->range_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+			pdata_in->echo_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+			pdata_in->angle_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+			idx++;
+		}
+		if (ls->active_sectors.right) {
+			pdata_in->range_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+			pdata_in->echo_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+			pdata_in->angle_measurements[pdata_in->sector_data_offsets[idx]
+					+ pdata_in->num_measurements[idx] - 1] = 0;
+
+			dof = pdata_in->sector_data_offsets[idx];
+			dif = ls->start_angle_v[idx]
+					+ ls->resolution_v * pdata_in->layer_num
+					- pdata_in->angle_measurements[dof + 0];
+			for (i = 0; i < pdata_in->num_measurements[idx]; i++) {
+				pdata_in->angle_measurements[dof + i] += dif;
+//				DMSG((STDOUT,"\t[%d] %f, %f, %u]\n",i, pdata_in->range_measurements[dof+i],
+//						pdata_in->angle_measurements[dof+i],(unsigned int)pdata_in->echo_measurements[dof+i]));
+			}
+
+		}
+	}
+
+//	if (ls->active_sectors.left)
+//		DMSG((STDOUT,"[%d,0] %f\n",pdata_in->layer_num, pdata_in->angle_measurements[pdata_in->sector_data_offsets[0]]));
+//	if (ls->active_sectors.right)
+//		DMSG((STDOUT,"[%d,1] %f\n",pdata_in->layer_num, pdata_in->angle_measurements[pdata_in->sector_data_offsets[1]]));
+#endif
+	memcpy(ls->scan_data_buf + pdata_in->layer_num, pdata_in,
+			sizeof(scan_data_t));
+
+	if (ls->slip_tick % ls->interlace_v == 0)
+		return ls->scan_data_buf;
+
+	return 0;
+}
+
 /************************************************************************/
 /*         根据当前水平角度范围和垂直角度范围，得到每一圈实际扫描数据和灰度图        */
 /************************************************************************/
-static e_int32 filter_data(laser_sick_t* ls, scan_data_t * pdata) {
-	e_assert(ls&&ls->state, E_ERROR_INVALID_HANDLER);
-	int didx = 0;
 
-	if (ls->slip_idx >= ls->width) {
-		ls->state = STATE_DONE;
-		DMSG((STDOUT,"ls_filter_data I'm full...\n"));
-		return E_ERROR;
-	}
-#if HACK_SLIP_ANGLE
-	pdata->h_angle = ls->slip_idx * ls->angle_dif_per_cloumn
-			+ ls->start_angle_h;
+static e_int32 filter_data(laser_sick_t* ls, scan_data_t * pdata_in) {
+	int didx = 0, tick_idx;
+	scan_data_t * pdata_buf, *pdata;
+#if DEBUG_TIME
+	e_uint32 start_time;
 #endif
+	e_assert(ls&&ls->state, E_ERROR_INVALID_HANDLER);
 
+	if (!(pdata_buf = add_slip_tick(ls, pdata_in)))
+		return E_OK;
+
+//	DMSG((STDOUT,"ls->slip_idx == %d/%d pdata->h_angle=%f \n", ls->slip_idx+1, ls->width, pdata->h_angle ));
 	if (ls->active_sectors.left) {
-		one_slip(ls, pdata, pdata->data_offsets[didx], pdata->num_values[didx],
-				0);
+#if DEBUG_TIME
+		start_time = GetTickCount();
+#endif
+		for (tick_idx = 0, pdata = pdata_buf; tick_idx < ls->interlace_v;
+				tick_idx++, pdata++) {
+			one_slip(ls, tick_idx, pdata, pdata->sector_data_offsets[didx],
+					pdata->num_measurements[didx], 0);
+		}
+#if DEBUG_TIME
+		DMSG((STDOUT,"1 Phrase data use:%u\n",GetTickCount()-start_time));
+		start_time = GetTickCount();
+#endif
+		dm_update(ls->writer, ls->slip_idx, 0);
+#if DEBUG_TIME
+		DMSG((STDOUT,"2 Phrase data use:%u\n",GetTickCount()-start_time));
+#endif
 		didx++;
 	}
 
 	if (ls->active_sectors.right) {
-		one_slip(ls, pdata, pdata->data_offsets[didx], pdata->num_values[didx],
-				1);
+#if DEBUG_TIME
+		start_time = GetTickCount();
+#endif
+		for (tick_idx = 0, pdata = pdata_buf; tick_idx < ls->interlace_v;
+				tick_idx++, pdata++) {
+			one_slip(ls, tick_idx, pdata, pdata->sector_data_offsets[didx],
+					pdata->num_measurements[didx], 1);
+		}
+#if DEBUG_TIME
+		DMSG((STDOUT,"3 Phrase data use:%u\n",GetTickCount()-start_time));
+		start_time = GetTickCount();
+#endif
+		dm_update(ls->writer, ls->slip_idx, 1);
+#if DEBUG_TIME
+		DMSG((STDOUT,"4 Phrase data use:%u\n",GetTickCount()-start_time));
+#endif
+		didx++;
 	}
+
 	ls->slip_idx++;
 	if (ls->slip_idx >= ls->width) {
 		ls->state = STATE_DONE;
 		DMSG(
-				(STDOUT,"ls_filter_data get enough data,last angle h = %f\n",pdata->h_angle));
+				(STDOUT,"ls_filter_data get enough data,last angle h = %f\n",pdata_buf->h_angle));
 	}
 	return E_OK;
 }
 
 static void print_config(laser_sick_t* ls) {
 	e_assert(ls&&ls->state);
-	DMSG((STDOUT,"\t======================================================\n"));
+	DMSG(
+			(STDOUT,"\t======================================================\n"));
 	DMSG((STDOUT,"\tLS300 V2.0 Config\n"));
 	DMSG((STDOUT,"\tTurntable:\n"));
 	DMSG((STDOUT,"\t\tSpeed:%u μs / plus\n",(unsigned int)ls->speed_h));
@@ -619,6 +817,7 @@ static void print_config(laser_sick_t* ls) {
 	DMSG((STDOUT,"\tLaser Machine:\n"));
 	DMSG((STDOUT,"\t\tSpeed:%u Hz\n",(unsigned int)ls->speed_v));
 	DMSG((STDOUT,"\t\tResolution:%f\n",ls->resolution_v));
+	DMSG((STDOUT,"\t\tInterlace:%d\n",ls->interlace_v));
 	if (ls->active_sectors.left)
 		DMSG(
 				(STDOUT,"\t\tAngle:%f - %f\n",ls->start_angle_v[0],ls->end_angle_v[0]));
@@ -629,6 +828,67 @@ static void print_config(laser_sick_t* ls) {
 	DMSG((STDOUT,"\t\tWidth:%d Height:%d\n",ls->width,ls->height));
 	DMSG(
 			(STDOUT,"\t\tangle_dif_per_column:%f angle_dif_per_degree:%f\n", ls->angle_dif_per_cloumn,ls->angle_dif_per_degree));
-	DMSG((STDOUT,"\t======================================================\n"));
+	DMSG(
+			(STDOUT,"\t======================================================\n"));
+}
+/*50	49.6
+ 100	99.8
+ 150	150.2
+ 200	199.7
+ 250	250.4
+ 400	406.9
+ 700	800.3
+ 850	965.4
+ 1250	1374.5
+ 2500	2836.4*/
+static int f2r(int speed) {
+	switch (speed) {
+//	case 50:
+//		return 49.6;
+//	case 100:
+//		return 99.8;
+//	case 150:
+//		return 150.2;
+//	case 200:
+//		return 199.7;
+//	case 250:
+//		return 250.4;
+//	case 400:
+//		return 400;
+	case 700:
+		return 780;
+	case 850:
+		return 935;
+	case 1250:
+		return 1328;
+	case 2500:
+		return 2576;
+	}
+	return speed;
 }
 
+static int r2f(int speed) {
+	switch (speed) {
+//	case 50:
+//		return 49.6;
+//	case 100:
+//		return 99.8;
+//	case 150:
+//		return 150.2;
+//	case 200:
+//		return 199.7;
+//	case 250:
+//		return 250.4;
+//	case 407:
+//		return 400;
+	case 780:
+		return 700;
+	case 935:
+		return 850;
+	case 1328:
+		return 1250;
+	case 2576:
+		return 2500;
+	}
+	return speed;
+}

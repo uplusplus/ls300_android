@@ -44,6 +44,8 @@ public class ConfigManager {
 					Precision.PRECISION_LEVEL_MIDDLE));
 			ret.add(new ScanConfig("Panoramic-High", -45, 90, 0, 360,
 					Precision.PRECISION_LEVEL_HIGH));
+			ret.add(new ScanConfig("Panoramic-Extra", -45, 90, 0, 360,
+					Precision.PRECISION_LEVEL_EXTRA));
 
 			return ret;
 		}
@@ -201,14 +203,14 @@ public class ConfigManager {
 
 	public static class Precisions {
 		public static enum Precision {
-			PRECISION_LEVEL_1, PRECISION_LEVEL_2, PRECISION_LEVEL_3, PRECISION_LEVEL_4,
+			PRECISION_LEVEL_1, PRECISION_LEVEL_2, PRECISION_LEVEL_3, PRECISION_LEVEL_4, PRECISION_LEVEL_5,
 			// /别名
-			PRECISION_LEVEL_LOW, PRECISION_LEVEL_NORMAL, PRECISION_LEVEL_MIDDLE, PRECISION_LEVEL_HIGH,
+			PRECISION_LEVEL_LOW, PRECISION_LEVEL_NORMAL, PRECISION_LEVEL_MIDDLE, PRECISION_LEVEL_HIGH, PRECISION_LEVEL_EXTRA,
 		}
 
 		public static String[] aviablePrecises = { "PRECISION_LEVEL_LOW",
 				"PRECISION_LEVEL_NORMAL", "PRECISION_LEVEL_MIDDLE",
-				"PRECISION_LEVEL_HIGH", };
+				"PRECISION_LEVEL_HIGH", "PRECISION_LEVEL_EXTRA",};
 
 		public static String[] aviablePlusDelay = { "20", "50", "100", "150",
 				"200", "250", "400", "700", "850", "1250", "2500", "5000" };
@@ -268,19 +270,14 @@ public class ConfigManager {
 			}
 		}
 
-		/*
-		 time		resolotion		speed_h		speed_v		width		height
-			288		0.125		200		5		1441		1081
-			144		0.25		100		5		721		541
-			72		0.375		50		7		505		361
-			72		0.5		50		5		361		271
-		 */
-
 		static precision[] configs = new precision[] {
 				new precision(5f, 0.5f, 50, 361, 271, 72),
 				new precision(7f, 0.375f, 50, 505, 361, 72),
 				new precision(5f, 0.25f, 100, 721, 541, 144),
-				new precision(5f, 0.125f, 200, 1441, 1081, 288), };
+				new precision(5f, 0.125f, 200, 1441, 1081, 288),
+				new precision(7f, 0.0625f, 1250, 2884, 2164, 1800),
+		// new precision(10f, 0.0625f, 850, 2884, 2164, 1224),
+				};
 
 		public static precision get(Precision p) {
 			int idx = 0;
@@ -300,6 +297,10 @@ public class ConfigManager {
 			case PRECISION_LEVEL_4:
 			case PRECISION_LEVEL_HIGH:
 				idx = 3;
+				break;
+			case PRECISION_LEVEL_5:
+			case PRECISION_LEVEL_EXTRA:
+				idx = 4;
 				break;
 			default:
 				Log.e(TAG, "Unrecognized precision.");

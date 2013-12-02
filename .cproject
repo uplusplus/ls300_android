@@ -22,7 +22,7 @@
 					<folderInfo id="cdt.managedbuild.config.gnu.so.debug.562872335." name="/" resourcePath="">
 						<toolChain errorParsers="" id="com.android.toolchain.gcc.947398964" name="Android GCC" nonInternalBuilderId="com.android.builder" resourceTypeBasedDiscovery="true" superClass="com.android.toolchain.gcc">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="com.android.targetPlatform.773535154" name="Android Platform" osList="all" superClass="com.android.targetPlatform"/>
-							<builder command="ndk-build" enableCleanBuild="false" errorParsers="" id="com.android.builder.1256224694" incrementalBuildTarget="V=1 NDK_DEBUG=1" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Android Builder" superClass="com.android.builder"/>
+							<builder arguments="" command="ndk-build" enableCleanBuild="false" errorParsers="" id="com.android.builder.1256224694" incrementalBuildTarget="V=1 NDK_DEBUG=1" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Android Builder" superClass="com.android.builder"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.1410694437" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.c.linker.base.395555067" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.base">
 								<option defaultValue="true" id="gnu.c.link.option.shared.1464131473" name="Shared (-shared)" superClass="gnu.c.link.option.shared" valueType="boolean"/>

@@ -24,7 +24,7 @@
 //量纲转换
 //1度 = 100步,每转180度
 #define ANGLE_TO_STEP(_angle_) ((int)((_angle_)*100))
-#define STEP_TO_ANGLE(_step_) ((((float)(_step_))/100))
+#define STEP_TO_ANGLE(_step_) ((((double)(_step_))/100))
 #define PULSE_SPEED_TO_STEP_TIME(_speed_) ((_speed_)*2*40)   //in us
 //通过电压值获得倾角
 #define VOLTATE_TO_DIP(_value_) (asin(((double)_value_ - 1024.0) / 1638.0) * 180.0 / M_PI)
@@ -48,7 +48,7 @@ static const e_uint8 START_WORK[] = { 0x23, 0x4d, 0x4f, 0x54, 0x4f, 0x2c,
 #define TIMEOUT_ANGLE 	(1E6)  	//倾角
 #define TIMEOUT_STEP 	(1E6)  	//水平角度
 #define TIMEOUT_TEMPERATURE (1E6)		//温度
-#define TIMEOUT_CAMERA (1E6*4)	//相机
+#define TIMEOUT_CAMERA (1E6*3)	//相机
 #define TIMEOUT_LED (1E6)			//指示灯
 #define TIMEOUT_INFO (1E6)		//取控制板信息,Battery
 //-----------------------------------------------------------------------------

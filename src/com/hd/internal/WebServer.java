@@ -7,7 +7,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.hd.base.ResLoader;
-import com.hd.ls300.R;
+import com.hd.R;
 
 public class WebServer {
 	private static String filesdir = null;
