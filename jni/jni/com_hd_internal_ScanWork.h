@@ -66,10 +66,10 @@ JNIEXPORT jint JNICALL Java_com_hd_internal_ScanWork_sj_1config
 /*
  * Class:     com_hd_internal_ScanWork
  * Method:    sj_set_data_dir
- * Signature: (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+ * Signature: (JLjava/lang/String;Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_com_hd_internal_ScanWork_sj_1set_1data_1dir
-  (JNIEnv *, jclass, jlong, jstring, jstring,jstring);
+  (JNIEnv *, jclass, jlong, jstring, jstring);
 
 /*
  * Class:     com_hd_internal_ScanWork

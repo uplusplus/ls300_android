@@ -85,7 +85,7 @@ e_int32 lm_uninit() {
 	exit_loop();
 	killthread(lm->main_thread);
 	semaphore_destroy(&lm->wakeup);
-	memset(lm,0,sizeof(laser_machine_t));
+	memset(lm, 0, sizeof(laser_machine_t));
 }
 
 e_int32 lm_start_record_angle(data_manager_t* dm) {
@@ -125,12 +125,16 @@ static int getAngle();
 static const struct {
 	int (*work)();
 	int seq_len;
-} system_timeslice[32] = { ts_getAngle, ts_getAngle, ts_battery, ts_getAngle,
-		ts_getAngle, ts_temperature, ts_getAngle, ts_getAngle, ts_battery,
-		ts_getAngle, ts_getAngle, ts_temperature, ts_getAngle, ts_getAngle,
-		ts_battery, ts_getAngle, ts_getAngle, ts_temperature, ts_getAngle,
-		ts_getAngle, ts_getAngle, ts_getTilt, { }, { }, { }, { }, { }, { }, { },
-		{ }, { }, ts_getAngle };
+} system_timeslice[32] = { ts_getAngle,
+		ts_getAngle, ts_battery, ts_getAngle,
+		ts_getAngle, ts_temperature, ts_getAngle,
+		ts_getAngle, ts_battery, ts_getAngle,
+		ts_getAngle, ts_temperature, ts_getAngle,
+		ts_getAngle, ts_battery, ts_getAngle,
+		ts_getAngle, ts_temperature, ts_getAngle,
+		ts_getAngle, ts_getAngle, ts_getTilt, { },
+		{ }, { }, { }, { }, { }, { }, { }, { },
+		ts_getAngle };
 
 static void main_loop(void* vs) {
 	static int seq = 0;
@@ -138,7 +142,8 @@ static void main_loop(void* vs) {
 		while (lm->state == STATE_WORK) {
 			system_timeslice[seq].work();
 			seq += system_timeslice[seq].seq_len;
-			seq &= 0x11111;
+			seq &= 31;
+//			DMSG((STDOUT,"_%d_",seq));
 		}
 		if (lm->state == STATE_PAUSE) {
 			lm->is_paused = 1;
@@ -152,13 +157,16 @@ static void main_loop(void* vs) {
 
 int getBattery() {
 	lm->battery = hl_get_battery(lm->lc);
+//	DMSG((STDOUT,"battery %8.4f\n",lm->battery));
 }
 int getTemperature() {
 	//获取温度
 	lm->temperature = hl_get_temperature(lm->lc);
+//	DMSG((STDOUT,"temperature %8.4f\n",lm->temperature));
 }
 int getTilt() {
-	hl_get_tilt(lm->lc, &lm->angle);
+	hl_get_tilt(lm->lc, &lm->tilt);
+//	DMSG((STDOUT,"tilt %8.4f %8.4f\n",lm->tilt.dX,lm->tilt.dY));
 }
 int getAngle() {
 	lm->angle_usec_timestamp = GetTickCount();

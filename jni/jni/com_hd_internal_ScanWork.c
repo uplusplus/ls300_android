@@ -119,22 +119,20 @@ JNIEXPORT jint JNICALL Java_com_hd_internal_ScanWork_sj_1config
 /*
  * Class:     com_hd_internal_ScanWork
  * Method:    sj_set_data_dir
- * Signature: (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+ * Signature: (JLjava/lang/String;Ljava/lang/String;)I
  */
 
 JNIEXPORT jint JNICALL Java_com_hd_internal_ScanWork_sj_1set_1data_1dir
-(JNIEnv *env, jclass clazz, jlong priv, jstring str, jstring str1, jstring str2) {
+(JNIEnv *env, jclass clazz, jlong priv, jstring str, jstring str1) {
 	int ret;
 	char *dir,*dir1,*dir2;
 	struct scan_job_t* scan = (struct scan_job_t*) priv;
 	e_assert(scan!=NULL, 0);
 	dir = (*env)->GetStringUTFChars(env, str, 0);
 	dir1 = (*env)->GetStringUTFChars(env, str1, 0);
-	dir2 = (*env)->GetStringUTFChars(env, str2, 0);
-	ret = sj_set_data_dir(scan, dir,dir1,dir2);
+	ret = sj_set_data_dir(scan, dir,dir1);
 	(*env)->ReleaseStringUTFChars(env, str, dir);
 	(*env)->ReleaseStringUTFChars(env, str1, dir1);
-	(*env)->ReleaseStringUTFChars(env, str2, dir2);
 	e_assert(ret>0, 0);
 	return 1;
 }
@@ -149,7 +147,7 @@ JNIEXPORT jint JNICALL Java_com_hd_internal_ScanWork_sj_1get_1state
 	int ret;
 	struct scan_job_t* scan = (struct scan_job_t*) priv;
 	e_assert(scan!=NULL, 0);
-	return sj_get_state(scan);
+	return (int)sj_get_state(scan);
 }
 
 /*

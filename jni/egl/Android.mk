@@ -34,7 +34,7 @@ LOCAL_SRC_FILES :=				\
 
 LOCAL_MODULE := egl
 
-LOCAL_STATIC_LIBRARIES := libecore
+LOCAL_STATIC_LIBRARIES := libecore_s
 
 
 include $(BUILD_SHARED_LIBRARY)

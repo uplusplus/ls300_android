@@ -54,8 +54,7 @@ static e_int32 init_display(int width, int height, float h_w, int mode);
 static void uninit_display();
 
 data_manager_t*
-dm_alloc(char* ptDir, char *grayDir, char *files_dir, int width, int height,
-		float h_w, int mode) {
+dm_alloc(char* ptDir, char *grayDir, int width, int height, float h_w, int mode) {
 	int i, ret;
 	data_adapter_t* pda;
 	system_time_t sys_time;

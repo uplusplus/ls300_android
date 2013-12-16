@@ -18,10 +18,12 @@ include $(CLEAR_VARS)
  	LOCAL_LDLIBS :=	 -L$(ROOT_PATH)/libs/arm/pcl -lpcl_common -lpcl_io \
 			 		 -L$(ROOT_PATH)/libs/arm/gif -lgif \
 			 		 -L$(ROOT_PATH)/libs/arm/boost \
-			 		 -lboost_thread -lboost_system -lboost_filesystem -llog
-
-	LOCAL_STATIC_LIBRARIES := libarch liblas libminini libjpeg
-	LOCAL_SHARED_LIBRARIES := libecore
+			 		 -lboost_thread -lboost_system \
+			 		 -lboost_filesystem -llog 
+	LOCAL_STATIC_LIBRARIES := libarch liblas libminini libjpeg libecore_s
+	LOCAL_SHARED_LIBRARIES := 
 
 	LOCAL_PRELINK_MODULE := false
 include $(BUILD_EXECUTABLE)
+
+ 

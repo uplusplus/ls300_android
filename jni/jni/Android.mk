@@ -13,8 +13,8 @@ include $(CLEAR_VARS)
 	
 	LOCAL_LDFLAGS += -llog -lc
 
-	LOCAL_STATIC_LIBRARIES :=
-	LOCAL_SHARED_LIBRARIES := libecore libcutils libutils libstlport libstdc++
+	LOCAL_STATIC_LIBRARIES :=	  libecore_s
+	LOCAL_SHARED_LIBRARIES :=  libcutils libutils libstlport libstdc++
 	
 	
 include $(BUILD_SHARED_LIBRARY)

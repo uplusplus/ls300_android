@@ -32,8 +32,7 @@ public class WorkFactory {
 	}
 
 	public static boolean ProcuctWork(ScanWork scan, ScanConfig sc) {
-		if (!scan.set_data_dir(Internal.point_cloud_path, Internal.image_path,
-				Internal.setting.paths.files_dir)) {
+		if (!scan.set_data_dir(Internal.point_cloud_path, Internal.image_path)) {
 			Log.e(TAG, "配置数据目录异常。");
 			scan.destroy();
 			return false;

@@ -82,8 +82,8 @@ public class ScanWork {
 	/************************************************************************
 	 * 设置点云数据存储目录,灰度图存储目录
 	 ************************************************************************/
-	public boolean set_data_dir(String ptDir, String grayDir,String filesDir) {
-		return sj_set_data_dir(ptr, ptDir, grayDir,filesDir) == 1;
+	public boolean set_data_dir(String ptDir, String grayDir) {
+		return sj_set_data_dir(ptr, ptDir, grayDir) == 1;
 	}
 
 	/************************************************************************/
@@ -128,7 +128,7 @@ public class ScanWork {
 	 * 设置点云数据存储目录,灰度图存储目录
 	 ************************************************************************/
 	private native static int sj_set_data_dir(long ptr, String ptDir,
-			String grayDir,String filesDir);
+			String grayDir);
 
 	public WorkState get_state() {
 		int ret = sj_get_state(ptr);
