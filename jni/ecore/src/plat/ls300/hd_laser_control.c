@@ -73,18 +73,18 @@ e_int32 static hl_push_state(laser_control_t *lc, CONTROL_REQUEST request) {
 		ret = lc->state == CONTROL_STATE_OPEN;
 		break;
 	case CONTROL_REQUEST_WORK_TURN:
-	case CONTROL_REQUEST_WORK_SICK:
+		case CONTROL_REQUEST_WORK_SICK:
 		ret = lc->state == CONTROL_STATE_OPEN;
 		if (ret)
 			lc->state = CONTROL_STATE_WORK;
 		break;
 	case CONTROL_REQUEST_COMMAND:
-	case CONTROL_REQUEST_COMMAND_PHOTO:
-	case CONTROL_REQUEST_COMMAND_LED:
-	case CONTROL_REQUEST_COMMAND_ANGLE:
-	case CONTROL_REQUEST_COMMAND_TEMPERATURE:
-	case CONTROL_REQUEST_COMMAND_DIP:
-	case CONTROL_REQUEST_COMMAND_BATTERY:
+		case CONTROL_REQUEST_COMMAND_PHOTO:
+		case CONTROL_REQUEST_COMMAND_LED:
+		case CONTROL_REQUEST_COMMAND_ANGLE:
+		case CONTROL_REQUEST_COMMAND_TEMPERATURE:
+		case CONTROL_REQUEST_COMMAND_DIP:
+		case CONTROL_REQUEST_COMMAND_BATTERY:
 		ret = lc->state == CONTROL_STATE_OPEN
 				|| lc->state == CONTROL_STATE_WORK;
 		break;
@@ -114,17 +114,17 @@ e_int32 static hl_pop_state(laser_control_t *lc, CONTROL_REQUEST request) {
 	case CONTROL_REQUEST_CONFIG:
 		break;
 	case CONTROL_REQUEST_WORK_TURN:
-	case CONTROL_REQUEST_WORK_SICK:
-	case CONTROL_REQUEST_WORK_PHOTO:
+		case CONTROL_REQUEST_WORK_SICK:
+		case CONTROL_REQUEST_WORK_PHOTO:
 		lc->state = CONTROL_STATE_OPEN;
 		break;
 	case CONTROL_REQUEST_COMMAND:
-	case CONTROL_REQUEST_COMMAND_PHOTO:
-	case CONTROL_REQUEST_COMMAND_LED:
-	case CONTROL_REQUEST_COMMAND_ANGLE:
-	case CONTROL_REQUEST_COMMAND_TEMPERATURE:
-	case CONTROL_REQUEST_COMMAND_DIP:
-	case CONTROL_REQUEST_COMMAND_BATTERY:
+		case CONTROL_REQUEST_COMMAND_PHOTO:
+		case CONTROL_REQUEST_COMMAND_LED:
+		case CONTROL_REQUEST_COMMAND_ANGLE:
+		case CONTROL_REQUEST_COMMAND_TEMPERATURE:
+		case CONTROL_REQUEST_COMMAND_DIP:
+		case CONTROL_REQUEST_COMMAND_BATTERY:
 		break;
 	case CONTROL_REQUEST_CLOSE:
 		break;
@@ -228,7 +228,7 @@ e_int32 hl_turntable_prepare(laser_control_t *lc, e_float64 pre_start_angle) {
 	lc->angle_pre = pre_start_angle;
 	//先转到开始位置,阻塞的
 	ret = inter_turn_by_step(lc, FAST_SPEED,
-			lc->start_steps - ANGLE_TO_STEP(pre_start_angle), 1); //冗余处理
+			lc->start_steps - ANGLE_TO_STEP(pre_start_angle), 1);
 	e_assert(ret>0, ret);
 	hl_pop_state(lc, CONTROL_REQUEST_WORK_TURN);
 	return E_OK;
@@ -244,7 +244,7 @@ e_int32 hl_turntable_start(laser_control_t *lc) {
 
 	//开始工作前，由速度和总步数结合得到该具体发送的命令,认为只要消息发送成功便是启动成功
 	sprintf(buf, MOTO_MSG_F,
-//			(int) lc->real_steps + ANGLE_TO_STEP(lc->angle_pre) + 500,
+			//			(int) lc->real_steps + ANGLE_TO_STEP(lc->angle_pre) + 500,
 			(int) lc->real_steps + ANGLE_TO_STEP(360), (int) lc->plus_delay); //冗余处理
 	DMSG((STDOUT,"REQUEST turn:%s",buf));
 
@@ -259,10 +259,11 @@ e_int32 hl_turntable_start(laser_control_t *lc) {
 //停止工作
 e_int32 hl_turntable_stop(laser_control_t *lc) {
 	int ret;
-	ret = lc->state == CONTROL_STATE_WORK;
-	e_assert(ret, E_ERROR_INVALID_STATUS);
+//	ret = lc->state == CONTROL_STATE_WORK;
+//	e_assert(ret, E_ERROR_INVALID_STATUS);
+	e_check_equal(lc->state, CONTROL_STATE_WORK);
 
-	DMSG((STDOUT,"Try StopWork\r\n"));
+	DMSG((STDOUT,"Try Stop Tunrtable\r\n"));
 
 	//重置socket状态
 	fsocket_reset(lc->fs_turntable);
@@ -299,8 +300,8 @@ e_int32 hl_turntable_config(laser_control_t *lc, e_uint32 plus_delay,
 	return E_OK;
 }
 
-static e_int32 inter_turn_by_step(laser_control_t *lc, e_uint32 speed, int step,
-		int sync) {
+static e_int32 inter_turn_by_step(laser_control_t *lc, e_uint32 speed,
+		int step, int sync) {
 	e_uint8 bufSend[40] = { 0 };
 	e_int32 ret, timeout = 0;
 	int step_abs;
@@ -355,6 +356,7 @@ e_int32 hl_turntable_turn_async(laser_control_t *lc, e_float64 angle) {
 
 	ret = inter_turn(lc, lc->plus_delay, angle, 0);
 
+	hl_pop_state(lc, CONTROL_REQUEST_WORK_TURN);
 	return ret;
 }
 

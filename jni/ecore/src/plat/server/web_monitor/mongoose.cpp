@@ -4216,7 +4216,9 @@ static uint32_t get_remote_ip(const struct mg_connection *conn) {
 }
 
 #ifdef USE_LUA
+extern "C"{
 #include "mod_lua.cm"
+}
 #endif // USE_LUA
 
 int mg_upload(struct mg_connection *conn, const char *destination_dir) {
@@ -4448,7 +4450,7 @@ static void handle_request(struct mg_connection *conn) {
           "Directory listing denied");
     }
 #ifdef USE_LUA
-  } else if (match_prefix("**.lp$", 6, path) > 0) {
+  } else if (match_prefix("**.lp$", 6, path) > 0 || match_prefix("**.lsp$", 7, path) > 0) {
     handle_lsp_request(conn, path, &file, NULL);
 #endif
 #if !defined(NO_CGI)
@@ -5381,3 +5383,6 @@ struct mg_context *mg_start(const struct mg_callbacks *callbacks,
 
   return ctx;
 }
+
+#include "mongoose.cm"
+

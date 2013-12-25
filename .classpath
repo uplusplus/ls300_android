@@ -7,5 +7,6 @@
 	<classpathentry exported="true" kind="lib" path="/data/software/xstream-1.4.4.jar"/>
 	<classpathentry kind="src" path="gen"/>
 	<classpathentry kind="lib" path="/work/project/Ls300_android/lib/httpclient-4.3.1.jar"/>
+	<classpathentry exported="true" kind="lib" path="/home/uplusplus/Documents/web/libs/android-support-v4.jar"/>
 	<classpathentry kind="output" path="bin/classes"/>
 </classpath>

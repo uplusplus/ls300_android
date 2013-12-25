@@ -36,6 +36,7 @@ e_int32 DEV_EXPORT sj_create(scan_job_t** sj_ret, char*dev, int baudrate,
 		char* ip, int port);
 
 e_int32 DEV_EXPORT sj_check_devices(scan_job_t* sj);
+e_int32 DEV_EXPORT sj_stop_devices(scan_job_t* sj);
 /************************************************************************
  * 与扫描仪断开连接
  ************************************************************************/
@@ -99,6 +100,8 @@ e_int32 DEV_EXPORT sj_search_zero(scan_job_t* sj);
 //硬件信息
 e_int32 DEV_EXPORT sj_get_info(scan_job_t* sj, e_uint32 idx, e_uint8* buffer,
 		e_int32 blen);
+
+char * DEV_EXPORT sj_state(scan_job_t* sj);
 
 #ifdef __cplusplus
 }

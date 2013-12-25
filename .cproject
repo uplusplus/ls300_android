@@ -107,6 +107,51 @@
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
+		<cconfiguration id="cdt.managedbuild.config.gnu.so.debug.562872335.770182701">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.so.debug.562872335.770182701" moduleId="org.eclipse.cdt.core.settings" name="excute">
+				<externalSettings>
+					<externalSetting>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/Ls300"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/Ls300"/>
+						<entry flags="RESOLVED" kind="libraryFile" name="Ls300"/>
+					</externalSetting>
+				</externalSettings>
+				<extensions>
+					<extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration artifactExtension="so" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.sharedLib" buildProperties="org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug,org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.sharedLib" cleanCommand="rm -rf" description="" errorParsers="" id="cdt.managedbuild.config.gnu.so.debug.562872335.770182701" name="excute" parent="cdt.managedbuild.config.gnu.so.debug">
+					<folderInfo id="cdt.managedbuild.config.gnu.so.debug.562872335.770182701." name="/" resourcePath="">
+						<toolChain errorParsers="" id="com.android.toolchain.gcc.2044578074" name="Android GCC" nonInternalBuilderId="com.android.builder" resourceTypeBasedDiscovery="true" superClass="com.android.toolchain.gcc">
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="com.android.targetPlatform.843568914" name="Android Platform" osList="all" superClass="com.android.targetPlatform"/>
+							<builder arguments="" command="ndk-build" enableCleanBuild="false" errorParsers="" id="com.android.builder.263048198" incrementalBuildTarget="V=1 NDK_DEBUG=1 USE_STDOUT=1" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Android Builder" superClass="com.android.builder"/>
+							<tool id="cdt.managedbuild.tool.gnu.archiver.base.1120360061" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.c.linker.base.469905144" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.base">
+								<option defaultValue="true" id="gnu.c.link.option.shared.766482384" name="Shared (-shared)" superClass="gnu.c.link.option.shared" valueType="boolean"/>
+							</tool>
+							<tool errorParsers="" id="cdt.managedbuild.tool.gnu.cpp.linker.base.1900111557" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.base">
+								<option defaultValue="true" id="gnu.cpp.link.option.shared.60989225" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" valueType="boolean"/>
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1937206666" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool errorParsers="" id="cdt.managedbuild.tool.gnu.assembler.base.104767048" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1299821279" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+							</tool>
+							<tool errorParsers="" id="com.android.gcc.compiler.1744519780" name="Android GCC Compiler" superClass="com.android.gcc.compiler">
+								<inputType id="com.android.gcc.inputType.551651504" superClass="com.android.gcc.inputType"/>
+							</tool>
+						</toolChain>
+					</folderInfo>
+					<sourceEntries>
+						<entry excluding="jni/ecore/inc/jpeg|jni/ecore/inc/websocket|jni/ecore/external/mongoose|jpeg0|jni/ecore/mongoose|mongoose" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+		</cconfiguration>
 	</storageModule>
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="Ls300.cdt.managedbuild.target.gnu.so.502200763" name="Shared Library" projectType="cdt.managedbuild.target.gnu.so"/>

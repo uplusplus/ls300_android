@@ -13,11 +13,12 @@ include $(CLEAR_VARS)
 						
 	LOCAL_SRC_FILES := $(call all-cpp-files-under,.) $(call all-c-files-under,.)  
 	
-	LOCAL_CFLAGS += -fexceptions -DANDROID_OS -DE_PRINT -D__ANDROID__ -DANDROID -DUSE_LUA
-	LOCAL_CPPFLAGS += -fexceptions -frtti
+	LOCAL_CFLAGS += -DANDROID_OS -DE_PRINT -D__ANDROID__ -DANDROID -DUSE_LUA
+	LOCAL_CPPFLAGS := -fexceptions -frtti -fpermissive $(LOCAL_CFLAGS)
+	
 	
 	LOCAL_LDFLAGS += $(ROOT_PATH)/libs/arm/std/libstdc++.a -Wl,-v
- 	LOCAL_LDLIBS :=	 -L$(ROOT_PATH)/libs/arm/pcl -lpcl_common -lpcl_io \
+ 	LOCAL_LDLIBS := -L$(ROOT_PATH)/libs/arm/pcl -lpcl_common -lpcl_io \
 			 		 -L$(ROOT_PATH)/libs/arm/gif -lgif \
 			 		 -L$(ROOT_PATH)/libs/arm/boost \
 			 		 -lboost_thread -lboost_system -lboost_filesystem -llog

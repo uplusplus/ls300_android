@@ -172,13 +172,13 @@ e_int32 sld_uninitialize(sickld_t* sick) {
 	ret = sld_set_signals(sick, DEFAULT_SICK_SIGNAL_SET);
 	e_assert(ret>0, ret);
 
-	/* Attempt to close the tcp connection */
-	DMSG((STDOUT, "\tClosing connection to Sick LD...\r\n"));
-	ret = sld_teardown_connection(sick);
-	e_assert(ret>0, ret);
-
-	DMSG((STDOUT, "\t\tConnection closed!\r\n"));
-	DMSG((STDOUT, "\t*** Uninit. complete - Sick LD is now offline!\r\n"));
+//	/* Attempt to close the tcp connection */
+//	DMSG((STDOUT, "\tClosing connection to Sick LD...\r\n"));
+//	ret = sld_teardown_connection(sick);
+//	e_assert(ret>0, ret);
+//
+//	DMSG((STDOUT, "\t\tConnection closed!\r\n"));
+//	DMSG((STDOUT, "\t*** Uninit. complete - Sick LD is now offline!\r\n"));
 
 	/* Mark the device as uninitialized */
 	sick->initialized = false;
@@ -1789,14 +1789,13 @@ e_int32 sld_set_sensor_mode_to_measure_ex(sickld_t *sick) {
  * \brief Sets the Sick LD sensor mode to IDLE
  */
 e_int32 sld_set_sensor_mode_to_idle(sickld_t *sick) {
-	int ret = E_OK;
+	int ret = E_OK,init;
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* If necessary adjust the operating mode of the sensor */
 	if (sick->sensor_mode != SICK_SENSOR_MODE_IDLE) {
 		/* Switch the sensor's operating mode to IDLE */
 		ret = sld_set_sensor_mode(sick, SICK_SENSOR_MODE_IDLE);
 	}
-
 	return ret;
 }
 
@@ -2310,7 +2309,6 @@ e_int32 sld_get_status(sickld_t *sick) {
 static e_int32 sld_quick_request(sickld_t *sick,
 		e_uint8 *payload_buffer/*[in,out]*/, e_uint32 recv_len) {
 	e_int32 ret = E_OK;
-	/* Ensure the device has been initialized */
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* Create the Sick messages */
 	sick_message_t send_message, recv_message;
@@ -3022,7 +3020,6 @@ e_int32 sld_get_next_message_from_datastream(sickld_t *sick,
 //	DMSG((STDOUT,"+++++++++++sld_get_next_message_from_datastream"));
 	/* A buffer to hold the current byte out of the stream */
 	const e_uint8 sick_response_header[4] = { 0x02, 'U', 'S', 'P' };
-
 	e_uint8 checksum = 0;
 	e_uint8 message_buffer[MESSAGE_MAX_LENGTH] = { 0 };
 	e_uint32 payload_length = 0;
