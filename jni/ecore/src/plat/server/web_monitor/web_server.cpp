@@ -32,7 +32,7 @@ static int should_stop_machine = 0;
 #define COMMANDS "\"authorize\",\"devicestate\",\"gray.jpg\",\"graysize\",\"turntable\"," \
 	"\"led\",\"takephoto\",\"angle\",\"tilt\",\"temperature\",\"battery\",\"config\",\"pointscan\"," \
 	"\"photoscan\", \"cancel\",\"availablePlusDelay\",\"availableFrequency\",\"availableResolution\"," \
-	"\"availablePrecision\",\"shutdown\",\"restart\",\"stopdevice\",\"help\""
+	"\"availablePrecision\",\"shutdown_device\",\"restart_server\",\"stop_device\",\"help\""
 
 #define AVIABLEPLUSDELAY "20, 50, 100, 150, 200, 250, 400, 700, 850, 1250, 2500, 5000"
 #define AVIABLEFREQUENCY "5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20"
@@ -49,7 +49,7 @@ static char *commands[] = { "authorize", "devicestate",
 		"tilt", "temperature", "battery", "config", "pointscan", "photoscan",
 		"cancel", "availablePlusDelay", "availableFrequency",
 		"availableResolution",
-		"availablePrecision", "restart", "stopdevice", "shutdown", "help" };
+		"availablePrecision", "restart_server", "stop_device", "shutdown_device", "help" };
 
 static struct {
 	int hash;
@@ -80,13 +80,14 @@ static int strcompare(const char** p1, char** p2) {
 		i++;
 	}
 }
-
+static void webserver_setIP();
 static void init_server() {
 	qsort(commands, sizeof(commands) / sizeof(commands[0]), sizeof(commands[0]),
 			strcompare);
 	semaphore_init(&stop_sem, 0);
 	loop = 1;
 	should_stop_machine = 0;
+	webserver_setIP();
 }
 
 static int is_command_avaiable(char *cmd) {
@@ -314,11 +315,11 @@ static int do_command(struct mg_connection *conn, const char *cmd) {
 			send_replay(conn, REPLAY_FORMAT("\"userlevel\": \"%s\""), cmd, 0,
 					"login failed.", "unauthorize");
 		}
-	} else if (urlcompare(cmd, "restart")) {
+	} else if (urlcompare(cmd, "restart_server")) {
 		stop_loop();
 		send_replay(conn, SIMPLE_REPLAY_FORMAT, cmd, 1,
 				"Laser server restarted.");
-	} else if (urlcompare(cmd, "shutdown")) {
+	} else if (urlcompare(cmd, "shutdown_device")) {
 		stop_machine();
 		send_replay(conn, SIMPLE_REPLAY_FORMAT, cmd, 1,
 				"Laser machine shutdown.");
@@ -402,11 +403,11 @@ static int do_ls300_command(struct mg_connection *conn, const char *cmd) {
 			send_replay(conn, SIMPLE_REPLAY_FORMAT, cmd, 1,
 					"Laser scan canceled.");
 		}
-	} else if (urlcompare(cmd, "stopdevice")) {
+	} else if (urlcompare(cmd, "stop_device")) {
 		ret = sj_stop_devices(server.ls300);
 		if (e_failed(ret)) {
 			send_replay(conn, SIMPLE_REPLAY_FORMAT, cmd, 0,
-					"Laser scan stopdevice failed.");
+					"Laser scan stop device failed.");
 		} else {
 			send_replay(conn, SIMPLE_REPLAY_FORMAT, cmd, 1,
 					"Laser scan device stopped.");
@@ -585,6 +586,10 @@ void webserver_loop() {
 
 static void webserver_shutdown_machine() {
 	system("/data/bin/shutdown");
+}
+
+static void webserver_setIP() {
+	system("/system/bin/ifconfig eth0 192.168.1.2 up");
 }
 
 e_int32 webserver_stop(void) {

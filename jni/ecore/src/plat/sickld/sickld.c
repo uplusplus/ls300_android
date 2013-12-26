@@ -1789,13 +1789,14 @@ e_int32 sld_set_sensor_mode_to_measure_ex(sickld_t *sick) {
  * \brief Sets the Sick LD sensor mode to IDLE
  */
 e_int32 sld_set_sensor_mode_to_idle(sickld_t *sick) {
-	int ret = E_OK,init;
+	int ret = E_OK;
 	e_assert(sick, E_ERROR_INVALID_HANDLER);
 	/* If necessary adjust the operating mode of the sensor */
 	if (sick->sensor_mode != SICK_SENSOR_MODE_IDLE) {
 		/* Switch the sensor's operating mode to IDLE */
 		ret = sld_set_sensor_mode(sick, SICK_SENSOR_MODE_IDLE);
 	}
+
 	return ret;
 }
 

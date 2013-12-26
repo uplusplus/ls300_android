@@ -73,18 +73,18 @@ e_int32 static hl_push_state(laser_control_t *lc, CONTROL_REQUEST request) {
 		ret = lc->state == CONTROL_STATE_OPEN;
 		break;
 	case CONTROL_REQUEST_WORK_TURN:
-		case CONTROL_REQUEST_WORK_SICK:
+	case CONTROL_REQUEST_WORK_SICK:
 		ret = lc->state == CONTROL_STATE_OPEN;
 		if (ret)
 			lc->state = CONTROL_STATE_WORK;
 		break;
 	case CONTROL_REQUEST_COMMAND:
-		case CONTROL_REQUEST_COMMAND_PHOTO:
-		case CONTROL_REQUEST_COMMAND_LED:
-		case CONTROL_REQUEST_COMMAND_ANGLE:
-		case CONTROL_REQUEST_COMMAND_TEMPERATURE:
-		case CONTROL_REQUEST_COMMAND_DIP:
-		case CONTROL_REQUEST_COMMAND_BATTERY:
+	case CONTROL_REQUEST_COMMAND_PHOTO:
+	case CONTROL_REQUEST_COMMAND_LED:
+	case CONTROL_REQUEST_COMMAND_ANGLE:
+	case CONTROL_REQUEST_COMMAND_TEMPERATURE:
+	case CONTROL_REQUEST_COMMAND_DIP:
+	case CONTROL_REQUEST_COMMAND_BATTERY:
 		ret = lc->state == CONTROL_STATE_OPEN
 				|| lc->state == CONTROL_STATE_WORK;
 		break;
@@ -114,17 +114,17 @@ e_int32 static hl_pop_state(laser_control_t *lc, CONTROL_REQUEST request) {
 	case CONTROL_REQUEST_CONFIG:
 		break;
 	case CONTROL_REQUEST_WORK_TURN:
-		case CONTROL_REQUEST_WORK_SICK:
-		case CONTROL_REQUEST_WORK_PHOTO:
+	case CONTROL_REQUEST_WORK_SICK:
+	case CONTROL_REQUEST_WORK_PHOTO:
 		lc->state = CONTROL_STATE_OPEN;
 		break;
 	case CONTROL_REQUEST_COMMAND:
-		case CONTROL_REQUEST_COMMAND_PHOTO:
-		case CONTROL_REQUEST_COMMAND_LED:
-		case CONTROL_REQUEST_COMMAND_ANGLE:
-		case CONTROL_REQUEST_COMMAND_TEMPERATURE:
-		case CONTROL_REQUEST_COMMAND_DIP:
-		case CONTROL_REQUEST_COMMAND_BATTERY:
+	case CONTROL_REQUEST_COMMAND_PHOTO:
+	case CONTROL_REQUEST_COMMAND_LED:
+	case CONTROL_REQUEST_COMMAND_ANGLE:
+	case CONTROL_REQUEST_COMMAND_TEMPERATURE:
+	case CONTROL_REQUEST_COMMAND_DIP:
+	case CONTROL_REQUEST_COMMAND_BATTERY:
 		break;
 	case CONTROL_REQUEST_CLOSE:
 		break;
@@ -244,7 +244,7 @@ e_int32 hl_turntable_start(laser_control_t *lc) {
 
 	//开始工作前，由速度和总步数结合得到该具体发送的命令,认为只要消息发送成功便是启动成功
 	sprintf(buf, MOTO_MSG_F,
-			//			(int) lc->real_steps + ANGLE_TO_STEP(lc->angle_pre) + 500,
+//			(int) lc->real_steps + ANGLE_TO_STEP(lc->angle_pre) + 500,
 			(int) lc->real_steps + ANGLE_TO_STEP(360), (int) lc->plus_delay); //冗余处理
 	DMSG((STDOUT,"REQUEST turn:%s",buf));
 

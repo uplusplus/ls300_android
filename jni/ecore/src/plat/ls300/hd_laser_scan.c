@@ -59,7 +59,7 @@ static int global_instance_lock = 0;
 scan_job_t* sj_global_instance() {
 	int ret;
 	if (!global_instance && !global_instance_lock) //此步是调试使用，一般要求主系统启动后，才允许连接web服务
-			{
+	{
 		global_instance_lock = 1;
 		ret = sj_create(&global_instance, "/dev/ttyUSB0", 38400, "192.168.1.10",
 				49152);
@@ -113,7 +113,6 @@ e_int32 sj_create(scan_job_t** sj_ret, char*dev, int baudrate, char* ip,
 		goto FAILED;
 	}
 
-	//额外初始化工作
 	lm_init(sj->control);
 	lm_start_status_monitor();
 

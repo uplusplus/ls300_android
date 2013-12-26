@@ -80,6 +80,7 @@ void hd_print_image(e_uint8* msg, int w, int h) {
 	}
 }
 
+
 char* hd_strncpy(char *dst, const char *src, size_t len) {
 	char* ret = strncpy(dst, src, len);
 	dst[len - 1] = '\0';
